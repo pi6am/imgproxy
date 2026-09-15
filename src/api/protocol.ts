@@ -1,0 +1,103 @@
+import { GenerationError, type ImageGenRequest } from "../core/types.js";
+
+export function clampInt(value: unknown, min: number, max: number, dflt: number): number {
+  const n = typeof value === "number" ? Math.floor(value) : Number.NaN;
+  if (!Number.isFinite(n)) return dflt;
+  return Math.min(max, Math.max(min, n));
+}
+
+export function optNum(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number.NaN;
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+export function optStr(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Parses OpenAI-style size strings like "1024x1024"; "auto"/undefined yields no dims. */
+export function parseOpenAISize(size: unknown): { width?: number; height?: number } {
+  if (typeof size !== "string") return {};
+  const m = /^(\d{2,5})x(\d{2,5})$/.exec(size.trim());
+  if (!m) return {};
+  return { width: Number(m[1]), height: Number(m[2]) };
+}
+
+export interface OpenAIGenerationBody {
+  prompt?: unknown;
+  model?: unknown;
+  n?: unknown;
+  size?: unknown;
+  response_format?: unknown;
+}
+
+export function openAIToRequest(
+  body: OpenAIGenerationBody,
+): { request: ImageGenRequest; responseFormat: "url" | "b64_json" } {
+  if (typeof body.prompt !== "string" || body.prompt.trim().length === 0) {
+    throw new GenerationError("A non-empty 'prompt' string is required", { statusCode: 400 });
+  }
+  const { width, height } = parseOpenAISize(body.size);
+  const responseFormat = body.response_format === "b64_json" ? "b64_json" : "url";
+  return {
+    request: {
+      source: "openai",
+      prompt: body.prompt,
+      width,
+      height,
+      n: clampInt(body.n, 1, 16, 1),
+      model: optStr(body.model),
+    },
+    responseFormat,
+  };
+}
+
+export interface A1111Txt2ImgBody {
+  prompt?: unknown;
+  negative_prompt?: unknown;
+  steps?: unknown;
+  cfg_scale?: unknown;
+  width?: unknown;
+  height?: unknown;
+  seed?: unknown;
+  sampler_name?: unknown;
+  batch_size?: unknown;
+  n_iter?: unknown;
+  override_settings?: { sd_model_checkpoint?: unknown };
+}
+
+export function a1111ToRequest(body: A1111Txt2ImgBody): ImageGenRequest {
+  const batchSize = clampInt(body.batch_size, 1, 16, 1);
+  const nIter = clampInt(body.n_iter, 1, 16, 1);
+  const seed = optNum(body.seed);
+  return {
+    source: "a1111",
+    prompt: typeof body.prompt === "string" ? body.prompt : "",
+    negativePrompt: optStr(body.negative_prompt),
+    width: optNum(body.width),
+    height: optNum(body.height),
+    steps: optNum(body.steps),
+    cfgScale: optNum(body.cfg_scale),
+    seed: seed !== undefined && seed >= 0 ? Math.floor(seed) : undefined,
+    sampler: optStr(body.sampler_name),
+    n: Math.min(32, batchSize * nIter),
+    model: optStr(body.override_settings?.sd_model_checkpoint),
+  };
+}
+
+/** Minimal sampler list so A1111 clients can populate their UIs. */
+export const A1111_SAMPLERS = [
+  "Euler",
+  "Euler a",
+  "Heun",
+  "DPM2",
+  "DPM2 a",
+  "LMS",
+  "DPM++ 2M",
+  "DPM++ SDE",
+  "DPM++ 2M SDE",
+  "DPM++ 3M SDE",
+  "DDIM",
+  "UniPC",
+].map((name) => ({ name, aliases: [], options: {}, description: `imgproxy passthrough: ${name}` }));
