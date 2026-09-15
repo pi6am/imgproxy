@@ -2,7 +2,6 @@ import { randomInt, randomUUID } from "node:crypto";
 import type { ComfyUIProviderConfig } from "../config/schema.js";
 import { GenerationError, type ImageGenRequest, type Provider, type ProviderResult } from "../core/types.js";
 import { applyMapping, type ComfyWorkflow } from "./workflow.js";
-
 interface ComfyHistoryImage {
   filename: string;
   subfolder?: string;
@@ -51,6 +50,9 @@ export class ComfyUIProvider implements Provider {
     const baseSeed =
       req.seed !== undefined && req.seed >= 0 ? req.seed : randomInt(0, 2 ** 48 - 1);
 
+    const sampler = req.sampler ?? d.sampler;
+    const scheduler = req.scheduler ?? d.scheduler;
+
     const values: Record<string, unknown> = {
       prompt: req.prompt,
       negative_prompt: req.negativePrompt ?? d.negativePrompt,
@@ -59,8 +61,8 @@ export class ComfyUIProvider implements Provider {
       steps: req.steps ?? d.steps,
       cfg: req.cfgScale ?? d.cfg,
       seed: baseSeed,
-      sampler: req.sampler ?? d.sampler,
-      scheduler: req.scheduler ?? d.scheduler,
+      sampler: sampler !== undefined ? toComfySamplerName(sampler) : undefined,
+      scheduler: scheduler !== undefined ? toComfySchedulerName(scheduler) : undefined,
       model: req.model,
     };
 
@@ -182,6 +184,163 @@ export class ComfyUIProvider implements Provider {
     }
     return images;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Sampler / scheduler vocabulary translation
+//
+// A1111-style clients use names like "Euler a" or "DPM++ 2M", while ComfyUI
+// expects lowercase ids like "euler_ancestral" / "dpmpp_2m". When such a
+// parameter is mapped onto a workflow input we translate known spellings and
+// fall back to lowercasing (ComfyUI ids are lowercase).
+
+export const COMFY_FALLBACK_SAMPLERS = [
+  "euler",
+  "euler_ancestral",
+  "heun",
+  "heunpp2",
+  "dpm_2",
+  "dpm_2_ancestral",
+  "lms",
+  "dpm_fast",
+  "dpm_adaptive",
+  "dpmpp_2s_ancestral",
+  "dpmpp_2s_ancestral_gpu",
+  "dpmpp_sde",
+  "dpmpp_sde_gpu",
+  "dpmpp_2m",
+  "dpmpp_2m_sde",
+  "dpmpp_2m_sde_gpu",
+  "dpmpp_3m_sde",
+  "dpmpp_3m_sde_gpu",
+  "ddpm",
+  "ddim",
+  "lcm",
+  "uni_pc",
+  "uni_pc_bh2",
+];
+
+export const COMFY_FALLBACK_SCHEDULERS = [
+  "normal",
+  "karras",
+  "exponential",
+  "sgm_uniform",
+  "simple",
+  "ddim_uniform",
+  "beta",
+  "beta_heuristic",
+];
+
+const SAMPLER_ALIASES: Record<string, string> = {
+  "euler a": "euler_ancestral",
+  "euler ancestral": "euler_ancestral",
+  dpm2: "dpm_2",
+  "dpm2 a": "dpm_2_ancestral",
+  "dpm++ 2s a": "dpmpp_2s_ancestral",
+  "dpm++ 2s ancestral": "dpmpp_2s_ancestral",
+  "dpm++ 2m": "dpmpp_2m",
+  "dpm++ 2m sde": "dpmpp_2m_sde",
+  "dpm++ 3m sde": "dpmpp_3m_sde",
+  "dpm++ sde": "dpmpp_sde",
+  "uni pc": "uni_pc",
+  unipc: "uni_pc",
+};
+
+const SCHEDULER_ALIASES: Record<string, string> = {
+  automatic: "simple",
+  uniform: "normal",
+  "sgm uniform": "sgm_uniform",
+  ddim: "ddim_uniform",
+};
+
+/** Translates A1111-style sampler spellings to ComfyUI sampler ids. */
+export function toComfySamplerName(name: string): string {
+  const key = name.trim().toLowerCase();
+  return SAMPLER_ALIASES[key] ?? key;
+}
+
+/** Translates A1111-style scheduler spellings to ComfyUI scheduler ids. */
+export function toComfySchedulerName(name: string): string {
+  const key = name.trim().toLowerCase();
+  return SCHEDULER_ALIASES[key] ?? key;
+}
+
+// ---------------------------------------------------------------------------
+// Live sampler/scheduler lists from ComfyUI object_info (for the A1111 API)
+
+type MappedParam = "sampler" | "scheduler";
+
+const INPUT_NAME_BY_PARAM: Record<MappedParam, string> = {
+  sampler: "sampler_name",
+  scheduler: "scheduler",
+};
+
+const listCache = new Map<string, { values: string[]; fetchedAt: number }>();
+const LIST_CACHE_TTL_MS = 300_000;
+
+export function clearComfyListCache(): void {
+  listCache.clear();
+}
+
+/**
+ * Fetches the list of values ComfyUI will accept for a mapped sampler/scheduler
+ * input, by inspecting the object_info of the mapped node's class (falling back
+ * to KSampler). Used so the A1111 API can advertise real, valid names.
+ */
+export async function fetchComfyParamValues(
+  cfg: ComfyUIProviderConfig,
+  param: MappedParam,
+): Promise<string[]> {
+  const base = cfg.baseUrl.replace(/\/+$/, "");
+  const inputName = INPUT_NAME_BY_PARAM[param];
+  const target = cfg.mapping?.[param];
+  const node = target ? (cfg.workflow as ComfyWorkflow)[target.node] : undefined;
+  const preferredClass = node?.class_type ?? "KSampler";
+
+  const cacheKey = `${base}::${preferredClass}::${inputName}`;
+  const cached = listCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < LIST_CACHE_TTL_MS) return cached.values;
+
+  const values =
+    (await queryInputValues(base, preferredClass, inputName)) ??
+    (preferredClass !== "KSampler" ? await queryInputValues(base, "KSampler", inputName) : undefined);
+  if (!values) {
+    throw new GenerationError(
+      `Could not retrieve the ${inputName} list from ComfyUI at ${base} (object_info)`,
+    );
+  }
+  listCache.set(cacheKey, { values, fetchedAt: Date.now() });
+  return values;
+}
+
+async function queryInputValues(
+  base: string,
+  classType: string,
+  inputName: string,
+): Promise<string[] | undefined> {
+  let res: Response;
+  try {
+    res = await fetch(`${base}/object_info/${encodeURIComponent(classType)}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return undefined; // unreachable/timeout — caller decides how to report
+  }
+  if (!res.ok) return undefined;
+  const json = (await res.json()) as Record<
+    string,
+    { input?: { required?: Record<string, unknown>; optional?: Record<string, unknown> } }
+  >;
+  const spec = json[classType]?.input;
+  const raw = spec?.required?.[inputName] ?? spec?.optional?.[inputName];
+  // ComfyUI format: [["a","b",...], {tooltip}] — or a plain string array.
+  if (Array.isArray(raw) && Array.isArray(raw[0]) && raw[0].every((v) => typeof v === "string")) {
+    return raw[0] as string[];
+  }
+  if (Array.isArray(raw) && raw.every((v) => typeof v === "string")) {
+    return raw as string[];
+  }
+  return undefined;
 }
 
 async function safeText(res: Response): Promise<string> {

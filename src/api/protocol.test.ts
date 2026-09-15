@@ -83,6 +83,11 @@ describe("a1111ToRequest", () => {
     expect(a1111ToRequest({ prompt: "x" }).seed).toBeUndefined();
   });
 
+  it("passes the scheduler field through", () => {
+    expect(a1111ToRequest({ prompt: "x", scheduler: "Karras" }).scheduler).toBe("Karras");
+    expect(a1111ToRequest({ prompt: "x" }).scheduler).toBeUndefined();
+  });
+
   it("handles empty bodies", () => {
     const req = a1111ToRequest({});
     expect(req.prompt).toBe("");

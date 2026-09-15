@@ -2,7 +2,12 @@ import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 import type { GenerationPipeline } from "../core/pipeline.js";
 import { GenerationError } from "../core/types.js";
-import { a1111ToRequest, A1111_SAMPLERS } from "./protocol.js";
+import {
+  COMFY_FALLBACK_SAMPLERS,
+  COMFY_FALLBACK_SCHEDULERS,
+  fetchComfyParamValues,
+} from "../providers/comfyui.js";
+import { a1111ToRequest, A1111_SAMPLERS, A1111_SCHEDULERS } from "./protocol.js";
 import { tokenOk } from "./openai.routes.js";
 import type { RouteDeps } from "./deps.js";
 
@@ -59,7 +64,7 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
     deps.getConfig().providers.map((p) => ({ model_name: p.name, title: `${p.name} (${p.type})`, hash: p.id, sha256: p.id, filename: `/imgproxy/${p.id}` })),
   );
 
-  app.get("/sdapi/v1/samplers", async () => A1111_SAMPLERS);
+  app.get("/sdapi/v1/samplers", async () => listItems("sampler", A1111_SAMPLERS));
 
   app.get("/sdapi/v1/upscalers", async () => [{ name: "Lanczos" }]);
 
@@ -77,9 +82,37 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
 
   app.get("/sdapi/v1/cmd-flags", async () => ({ api: true, listen: true }));
 
-  app.get("/sdapi/v1/schedulers", async () => []);
+  app.get("/sdapi/v1/schedulers", async () => listItems("scheduler", A1111_SCHEDULERS));
 
   app.get("/internal/ping", async () => "pong");
+
+  /**
+   * Advertises real ComfyUI values when the given parameter is mapped onto a
+   * ComfyUI workflow input (so clients send names ComfyUI accepts); otherwise
+   * the static A1111 vocabulary is fine since the value is not forwarded.
+   */
+  async function listItems(
+    param: "sampler" | "scheduler",
+    fallback: { name: string; aliases: never[]; options: {}; description: string }[],
+  ) {
+    const cfg = deps.getConfig();
+    const active = cfg.providers.find((p) => p.id === cfg.activeProviderId) ?? cfg.providers[0];
+    if (active?.type !== "comfyui" || !active.mapping?.[param]) return fallback;
+
+    let names: string[];
+    try {
+      names = await fetchComfyParamValues(active, param);
+    } catch (err) {
+      app.log.warn(`sdapi ${param} list: ${(err as Error).message}; using built-in ComfyUI fallback`);
+      names = param === "sampler" ? COMFY_FALLBACK_SAMPLERS : COMFY_FALLBACK_SCHEDULERS;
+    }
+    return names.map((name) => ({
+      name,
+      aliases: [],
+      options: {},
+      description: `ComfyUI ${param} (forwarded by imgproxy): ${name}`,
+    }));
+  }
 }
 
 function readB64(deps: RouteDeps, imageId: string): string {

@@ -62,6 +62,7 @@ export interface A1111Txt2ImgBody {
   height?: unknown;
   seed?: unknown;
   sampler_name?: unknown;
+  scheduler?: unknown;
   batch_size?: unknown;
   n_iter?: unknown;
   override_settings?: { sd_model_checkpoint?: unknown };
@@ -81,6 +82,7 @@ export function a1111ToRequest(body: A1111Txt2ImgBody): ImageGenRequest {
     cfgScale: optNum(body.cfg_scale),
     seed: seed !== undefined && seed >= 0 ? Math.floor(seed) : undefined,
     sampler: optStr(body.sampler_name),
+    scheduler: optStr(body.scheduler),
     n: Math.min(32, batchSize * nIter),
     model: optStr(body.override_settings?.sd_model_checkpoint),
   };
@@ -100,4 +102,15 @@ export const A1111_SAMPLERS = [
   "DPM++ 3M SDE",
   "DDIM",
   "UniPC",
+].map((name) => ({ name, aliases: [], options: {}, description: `imgproxy passthrough: ${name}` }));
+
+/** Minimal scheduler list in A1111 vocabulary. */
+export const A1111_SCHEDULERS = [
+  "Automatic",
+  "Uniform",
+  "Karras",
+  "Exponential",
+  "SGM Uniform",
+  "Simple",
+  "DDIM",
 ].map((name) => ({ name, aliases: [], options: {}, description: `imgproxy passthrough: ${name}` }));
