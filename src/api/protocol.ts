@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+import type { ProviderConfig } from "../config/schema.js";
 import { GenerationError, type ImageGenRequest } from "../core/types.js";
+import type { ComfyWorkflow } from "../providers/workflow.js";
 
 export function clampInt(value: unknown, min: number, max: number, dflt: number): number {
   const n = typeof value === "number" ? Math.floor(value) : Number.NaN;
@@ -114,3 +117,33 @@ export const A1111_SCHEDULERS = [
   "Simple",
   "DDIM",
 ].map((name) => ({ name, aliases: [], options: {}, description: `imgproxy passthrough: ${name}` }));
+
+/**
+ * The single model name advertised to A1111 clients: for ComfyUI providers the
+ * current value of the mapped model node input (if mapped), for OpenAI
+ * providers the configured model. Null when nothing should be advertised.
+ */
+export function mappedModelName(provider: ProviderConfig | undefined): string | null {
+  if (!provider) return null;
+  if (provider.type === "comfyui") {
+    const target = provider.mapping?.model;
+    if (!target) return null;
+    const node = (provider.workflow as ComfyWorkflow)[target.node];
+    const value = node?.inputs?.[target.input];
+    return typeof value === "string" && value.trim().length > 0 ? value : null;
+  }
+  if (provider.type === "openai") return provider.model || null;
+  return null;
+}
+
+/** Builds an A1111 sd-models entry with a stable, A1111-style short hash. */
+export function modelEntry(name: string): {
+  model_name: string;
+  title: string;
+  hash: string;
+  sha256: string;
+  filename: string;
+} {
+  const hash = createHash("sha256").update(name).digest("hex").slice(0, 12);
+  return { model_name: name, title: name, hash, sha256: hash, filename: name };
+}

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
+import type { AppConfig } from "../config/schema.js";
 import type { GenerationPipeline } from "../core/pipeline.js";
 import { GenerationError } from "../core/types.js";
 import {
@@ -7,9 +8,20 @@ import {
   COMFY_FALLBACK_SCHEDULERS,
   fetchComfyParamValues,
 } from "../providers/comfyui.js";
-import { a1111ToRequest, A1111_SAMPLERS, A1111_SCHEDULERS } from "./protocol.js";
+import type { ComfyWorkflow } from "../providers/workflow.js";
+import {
+  a1111ToRequest,
+  A1111_SAMPLERS,
+  A1111_SCHEDULERS,
+  mappedModelName,
+  modelEntry,
+} from "./protocol.js";
 import { tokenOk } from "./openai.routes.js";
 import type { RouteDeps } from "./deps.js";
+
+function activeProvider(cfg: AppConfig) {
+  return cfg.providers.find((p) => p.id === cfg.activeProviderId) ?? cfg.providers[0];
+}
 
 export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const guard = () => {
@@ -55,14 +67,61 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
 
   app.get("/sdapi/v1/options", async (req, reply) => {
     if (!guard().enabled) return reply.status(404).send({ detail: "A1111 API disabled" });
-    return { sd_model_checkpoint: "", imgproxy: true };
+    // samples_format must be non-null: clients like KoboldAI Lite treat its
+    // absence as "invalid data" and refuse to connect.
+    return {
+      sd_model_checkpoint: mappedModelName(activeProvider(deps.getConfig())) ?? "",
+      samples_format: "png",
+      imgproxy: true,
+    };
   });
 
-  app.post("/sdapi/v1/options", async () => ({}));
+  // Honoring model selection: when ComfyUI 'model' is mapped, a client picking
+  // a checkpoint is written into the mapped workflow node and persisted.
+  app.post("/sdapi/v1/options", async (req) => {
+    const checkpoint = (req.body as { sd_model_checkpoint?: unknown } | undefined)?.sd_model_checkpoint;
+    if (typeof checkpoint === "string" && checkpoint.trim()) {
+      const cfg = deps.getConfig();
+      const active = activeProvider(cfg);
+      if (active?.type === "comfyui") {
+        const target = active.mapping?.model;
+        const workflow = structuredClone(active.workflow) as ComfyWorkflow;
+        const node = target ? workflow[target.node] : undefined;
+        if (target && node?.inputs && typeof node.inputs === "object") {
+          node.inputs[target.input] = checkpoint.trim();
+          const providers = cfg.providers.map((p) => (p.id === active.id ? { ...p, workflow } : p));
+          try {
+            deps.saveConfig({ ...cfg, providers });
+            app.log.info(`sd_model_checkpoint set to '${checkpoint.trim()}' (mapped node ${target.node}.${target.input})`);
+          } catch (err) {
+            app.log.warn(`Could not persist sd_model_checkpoint: ${(err as Error).message}`);
+          }
+        }
+      }
+    }
+    return {};
+  });
 
-  app.get("/sdapi/v1/sd-models", async () =>
-    deps.getConfig().providers.map((p) => ({ model_name: p.name, title: `${p.name} (${p.type})`, hash: p.id, sha256: p.id, filename: `/imgproxy/${p.id}` })),
-  );
+  app.get("/sdapi/v1/sd-models", async () => {
+    const cfg = deps.getConfig();
+    const active = activeProvider(cfg);
+    if (active?.type === "a1111") {
+      // External A1111 backend: forward its real model list.
+      try {
+        const res = await fetch(`${active.baseUrl.replace(/\/+$/, "")}/sdapi/v1/sd-models`, {
+          headers: active.apiKey ? { authorization: `Bearer ${active.apiKey}` } : {},
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (res.ok) return ((await res.json()) as unknown[]) ?? [];
+      } catch {
+        /* fall through to empty */
+      }
+      return [];
+    }
+    // Advertise only the model the active workflow/endpoint actually uses.
+    const name = mappedModelName(active);
+    return name ? [modelEntry(name)] : [];
+  });
 
   app.get("/sdapi/v1/samplers", async () => listItems("sampler", A1111_SAMPLERS));
 
@@ -95,8 +154,7 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
     param: "sampler" | "scheduler",
     fallback: { name: string; aliases: never[]; options: {}; description: string }[],
   ) {
-    const cfg = deps.getConfig();
-    const active = cfg.providers.find((p) => p.id === cfg.activeProviderId) ?? cfg.providers[0];
+    const active = activeProvider(deps.getConfig());
     if (active?.type !== "comfyui" || !active.mapping?.[param]) return fallback;
 
     let names: string[];

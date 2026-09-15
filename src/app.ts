@@ -32,6 +32,28 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
     else req.log.warn(err.message);
     reply.status(status).send({ error: err.message });
   });
+
+  // Concise request/response body logging for the public API surfaces, to make
+  // client-compatibility debugging easy. Bodies are truncated; the web UI's own
+  // /api traffic is excluded.
+  const API_LOG_PREFIXES = ["/sdapi", "/v1", "/internal"];
+  const isApiTraffic = (url: string) => API_LOG_PREFIXES.some((p) => url.split("?")[0]!.startsWith(p));
+  const preview = (value: unknown): string => {
+    const text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+    return text.length > 500 ? `${text.slice(0, 500)}…(+${text.length - 500} chars)` : text;
+  };
+  app.addHook("preHandler", async (req) => {
+    if (req.body !== undefined && req.body !== null && isApiTraffic(req.url)) {
+      req.log.info(`req body  ${req.method} ${req.url}: ${preview(req.body)}`);
+    }
+  });
+  app.addHook("preSerialization", async (req, _reply, payload) => {
+    if (payload !== undefined && payload !== null && isApiTraffic(req.url)) {
+      req.log.info(`res body  ${req.method} ${req.url}: ${preview(payload)}`);
+    }
+    return payload;
+  });
+
   void registerOpenAIRoutes(app, deps);
   void registerA1111Routes(app, deps);
   void registerAdminRoutes(app, deps);
