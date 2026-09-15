@@ -75,7 +75,7 @@ export interface WorkflowNodeInfo {
   id: string;
   classType: string;
   title?: string;
-  inputs: { name: string; kind: "scalar" | "link"; valueType: string }[];
+  inputs: { name: string; kind: "scalar" | "link"; valueType: string; value?: string }[];
 }
 
 export interface HistoryItem {

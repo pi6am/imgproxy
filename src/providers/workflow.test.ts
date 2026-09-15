@@ -75,23 +75,39 @@ describe("applyMapping", () => {
 });
 
 describe("listWorkflowNodes", () => {
-  it("classifies link vs scalar inputs", () => {
+  it("classifies link vs scalar inputs and previews current values", () => {
     const wf = loadWorkflow("image_krea2_turbo_t2i.json");
     const nodes = listWorkflowNodes(wf);
     const byId = new Map(nodes.map((n) => [n.id, n]));
 
     const primitive = byId.get("52")!;
     expect(primitive.classType).toBe("PrimitiveInt");
-    expect(primitive.inputs).toEqual([{ name: "value", kind: "scalar", valueType: "number" }]);
+    expect(primitive.inputs).toEqual([
+      { name: "value", kind: "scalar", valueType: "number", value: "1024" },
+    ]);
 
     const clipEncode = byId.get("30:6")!;
     const textInput = clipEncode.inputs.find((i) => i.name === "text")!;
     expect(textInput.kind).toBe("link");
+    expect(textInput.value).toBeUndefined();
 
     const sampler = byId.get("30:3")!;
     const seedInput = sampler.inputs.find((i) => i.name === "seed")!;
     expect(seedInput.kind).toBe("link");
     expect(sampler.title).toBe("KSampler");
+    expect(sampler.inputs.find((i) => i.name === "steps")!.value).toBe("8");
+    expect(sampler.inputs.find((i) => i.name === "cfg")!.value).toBe("1");
+  });
+
+  it("truncates and flattens long string values in previews", () => {
+    const wf = loadWorkflow("image_krea2_turbo_t2i.json");
+    const nodes = listWorkflowNodes(wf);
+    const systemPrompt = nodes.find((n) => n.id === "30:18")!;
+    const valueInput = systemPrompt.inputs.find((i) => i.name === "value")!;
+    expect(valueInput.kind).toBe("scalar");
+    expect(valueInput.value!.length).toBe(49); // 48 chars + ellipsis
+    expect(valueInput.value!.endsWith("…")).toBe(true);
+    expect(/\n/.test(valueInput.value!)).toBe(false);
   });
 
   it("ignores non-node entries", () => {

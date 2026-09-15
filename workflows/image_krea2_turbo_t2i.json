@@ -174,7 +174,7 @@
   },
   "30:19": {
     "inputs": {
-      "value": "A drawing of a sexy cheeseburger."
+      "value": "A drawing of a cheeseburger."
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {

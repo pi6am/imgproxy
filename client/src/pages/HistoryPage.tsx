@@ -60,6 +60,9 @@ export default function HistoryPage() {
             History <span className="hint">{total} request{total === 1 ? "" : "s"}</span>
           </h2>
           <div className="row">
+            <button onClick={() => void load(offset)} disabled={loading}>
+              {loading ? "Refreshing…" : "Refresh"}
+            </button>
             {total > PAGE_SIZE && (
               <>
                 <button disabled={offset === 0 || loading} onClick={() => load(Math.max(0, offset - PAGE_SIZE))}>

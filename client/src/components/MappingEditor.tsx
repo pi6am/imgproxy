@@ -74,6 +74,7 @@ export default function MappingEditor({
             <th>Parameter</th>
             <th>Node</th>
             <th>Input</th>
+            <th>Current value</th>
           </tr>
         </thead>
         <tbody>
@@ -82,6 +83,9 @@ export default function MappingEditor({
             const node = entry ? nodesById.get(entry.node) : undefined;
             const scalarInputs = node?.inputs.filter((i) => i.kind === "scalar") ?? [];
             const missing = Boolean(entry) && nodes !== null && !node;
+            const mappedInput = node?.inputs.find((i) => i.name === entry?.input);
+            const currentValue =
+              entry && mappedInput && mappedInput.kind === "scalar" ? (mappedInput.value ?? "") : undefined;
             return (
               <tr key={param} className={missing ? "warn" : undefined}>
                 <td>{PARAM_LABELS[param] ?? param}</td>
@@ -114,11 +118,14 @@ export default function MappingEditor({
                     {entry && scalarInputs.length === 0 && <option value={entry.input}>{entry.input}</option>}
                     {scalarInputs.map((i) => (
                       <option key={i.name} value={i.name}>
-                        {i.name} ({i.valueType})
+                        {i.name} ({i.valueType}){i.value ? ` = ${i.value}` : ""}
                       </option>
                     ))}
                   </select>
                   {missing && <span className="hint warn-text">node missing in current workflow</span>}
+                </td>
+                <td className="current-value" title={currentValue}>
+                  {currentValue || "—"}
                 </td>
               </tr>
             );

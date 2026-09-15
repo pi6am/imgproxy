@@ -14,6 +14,8 @@ export interface WorkflowNodeInputInfo {
   name: string;
   kind: "scalar" | "link";
   valueType: string;
+  /** Truncated preview of the current value (scalar inputs only). */
+  value?: string;
 }
 
 export interface WorkflowNodeInfo {
@@ -40,6 +42,7 @@ export function listWorkflowNodes(workflow: ComfyWorkflow): WorkflowNodeInfo[] {
           name,
           kind: isLink ? "link" : "scalar",
           valueType: isLink ? "link" : value === null ? "null" : typeof value,
+          value: isLink ? undefined : previewValue(value),
         });
       }
     }
@@ -52,6 +55,18 @@ export function listWorkflowNodes(workflow: ComfyWorkflow): WorkflowNodeInfo[] {
   }
   nodes.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
   return nodes;
+}
+
+const PREVIEW_MAX = 48;
+
+/** Compact single-line string form of a node input value for display in the UI. */
+function previewValue(value: unknown): string {
+  let text: string;
+  if (typeof value === "string") text = value;
+  else if (value === null) text = "null";
+  else text = JSON.stringify(value) ?? String(value);
+  text = text.replace(/\s+/g, " ").trim();
+  return text.length > PREVIEW_MAX ? `${text.slice(0, PREVIEW_MAX)}…` : text;
 }
 
 export interface AppliedMapping {
