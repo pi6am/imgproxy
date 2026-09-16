@@ -19,6 +19,10 @@ export default defineConfig({
       "/api": backend,
       "/v1": backend,
       "/sdapi": backend,
+      "/favicon": backend,
+      "/apple": backend,
+      "/android": backend,
+      "/site": backend,
     },
   },
 });

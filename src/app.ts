@@ -58,10 +58,29 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
   void registerA1111Routes(app, deps);
   void registerAdminRoutes(app, deps);
 
-  const clientDist = path.resolve(
-    path.dirname(path.dirname(fileURLToPath(import.meta.url))),
-    "client/dist",
-  );
+  // Favicon files are served from the repository's favicon/ directory at the
+  // site root (browsers don't accept them from a subdirectory).
+  const projectRoot = path.resolve(path.dirname(path.dirname(fileURLToPath(import.meta.url))));
+  const FAVICON_FILES: Record<string, string> = {
+    "favicon.ico": "image/x-icon",
+    "favicon-16x16.png": "image/png",
+    "favicon-32x32.png": "image/png",
+    "apple-touch-icon.png": "image/png",
+    "android-chrome-192x192.png": "image/png",
+    "android-chrome-512x512.png": "image/png",
+    "site.webmanifest": "application/manifest+json",
+  };
+  for (const [file, mime] of Object.entries(FAVICON_FILES)) {
+    app.get(`/${file}`, (_req, reply) => {
+      const filePath = path.join(projectRoot, "favicon", file);
+      if (!fs.existsSync(filePath)) return reply.status(404).send({ error: "Not found" });
+      reply.header("content-type", mime);
+      reply.header("cache-control", "public, max-age=604800");
+      return reply.send(fs.createReadStream(filePath));
+    });
+  }
+
+  const clientDist = path.resolve(projectRoot, "client/dist");
   if (fs.existsSync(path.join(clientDist, "index.html"))) {
     void app.register(fastifyStatic, { root: clientDist });
     app.setNotFoundHandler((req, reply) => {
