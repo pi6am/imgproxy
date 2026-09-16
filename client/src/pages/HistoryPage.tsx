@@ -121,9 +121,15 @@ export default function HistoryPage() {
               </div>
             </div>
             {detail.request.error && <div className="banner error">{detail.request.error}</div>}
-            <div className="image-grid">
+            <div className="modal-images">
               {detail.images.map((img) => (
-                <a key={img.id} href={img.url} target="_blank" rel="noreferrer" title={`${img.width ?? "?"}×${img.height ?? "?"}`}>
+                <a
+                  key={img.id}
+                  href={img.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`${img.width ?? "?"}×${img.height ?? "?"} — click for full size`}
+                >
                   <img src={img.url} alt="generated" />
                 </a>
               ))}
