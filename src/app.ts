@@ -11,6 +11,11 @@ import type { RouteDeps } from "./api/deps.js";
 export function buildApp(deps: RouteDeps): FastifyInstance {
   const pretty = process.stdout.isTTY;
   const app = Fastify({
+    // Clients like KoboldAI Lite concatenate URL parts and can produce paths
+    // such as //v1/images/generations; tolerate those instead of falling
+    // through to the SPA fallback.
+    ignoreTrailingSlash: true,
+    ignoreDuplicateSlashes: true,
     logger: pretty
       ? { transport: { target: "pino-pretty", options: { translateTime: "HH:MM:ss", ignore: "pid,hostname" } } }
       : true,

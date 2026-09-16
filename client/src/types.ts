@@ -19,6 +19,7 @@ export interface ComfyUIProviderCfg {
   name: string;
   type: "comfyui";
   baseUrl: string;
+  apiKey: string;
   workflow: Record<string, unknown>;
   mapping: Record<string, NodeMapping | null>;
   defaults: GenDefaults;
@@ -51,7 +52,7 @@ export interface AppConfig {
   server: { host: string; port: number };
   apis: {
     openai: { enabled: boolean; token: string };
-    a1111: { enabled: boolean; token: string };
+    a1111: { enabled: boolean };
   };
   activeProviderId: string;
   providers: ProviderCfg[];

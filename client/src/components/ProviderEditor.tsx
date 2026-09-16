@@ -96,6 +96,15 @@ export function ProviderEditor({
       {provider.type === "comfyui" && (
         <>
           <label>
+            Bearer token <span className="hint">(optional — sent to ComfyUI if it requires token auth)</span>
+            <input
+              type="password"
+              value={provider.apiKey}
+              onChange={(e) => onChange({ ...provider, apiKey: e.target.value } as ProviderCfg)}
+              placeholder="leave empty if ComfyUI has no auth"
+            />
+          </label>
+          <label>
             Workflow JSON (ComfyUI API format)
             <textarea
               className="workflow-textarea"
@@ -282,6 +291,7 @@ export function newProvider(type: ProviderCfg["type"]): ProviderCfg {
       name,
       type,
       baseUrl: "http://127.0.0.1:8188",
+      apiKey: "",
       workflow: {},
       mapping: {},
       defaults: {},

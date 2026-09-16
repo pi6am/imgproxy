@@ -44,6 +44,11 @@ export class ComfyUIProvider implements Provider {
     return this.cfg.baseUrl.replace(/\/+$/, "");
   }
 
+  /** Bearer auth for ComfyUI instances that require a token. */
+  private authHeaders(): Record<string, string> {
+    return this.cfg.apiKey ? { authorization: `Bearer ${this.cfg.apiKey}` } : {};
+  }
+
   async generate(req: ImageGenRequest): Promise<ProviderResult> {
     const n = Math.max(1, Math.floor(req.n || 1));
     const d = this.cfg.defaults ?? {};
@@ -85,7 +90,10 @@ export class ComfyUIProvider implements Provider {
 
   async check(): Promise<{ ok: boolean; detail: string }> {
     try {
-      const res = await fetch(`${this.base}/system_stats`, { signal: AbortSignal.timeout(10_000) });
+      const res = await fetch(`${this.base}/system_stats`, {
+        headers: this.authHeaders(),
+        signal: AbortSignal.timeout(10_000),
+      });
       if (!res.ok) return { ok: false, detail: `ComfyUI responded with HTTP ${res.status}` };
       return { ok: true, detail: "ComfyUI reachable" };
     } catch (err) {
@@ -100,7 +108,7 @@ export class ComfyUIProvider implements Provider {
     try {
       const res = await fetch(`${this.base}/prompt`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...this.authHeaders() },
         body: JSON.stringify({ prompt: workflow, client_id: clientId }),
         signal: AbortSignal.timeout(30_000),
       });
@@ -124,6 +132,7 @@ export class ComfyUIProvider implements Provider {
     while (Date.now() < deadline) {
       await sleep(this.cfg.pollIntervalMs);
       const res = await fetch(`${this.base}/history/${promptId}`, {
+        headers: this.authHeaders(),
         signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) {
@@ -167,7 +176,10 @@ export class ComfyUIProvider implements Provider {
           `${this.base}/view?filename=${encodeURIComponent(img.filename)}` +
           `&subfolder=${encodeURIComponent(img.subfolder ?? "")}` +
           `&type=${encodeURIComponent(img.type ?? "output")}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+        const res = await fetch(url, {
+          headers: this.authHeaders(),
+          signal: AbortSignal.timeout(60_000),
+        });
         if (!res.ok) {
           throw new GenerationError(
             `Failed to download generated image '${img.filename}' from ComfyUI (HTTP ${res.status})`,
@@ -293,6 +305,9 @@ export async function fetchComfyParamValues(
 ): Promise<string[]> {
   const base = cfg.baseUrl.replace(/\/+$/, "");
   const inputName = INPUT_NAME_BY_PARAM[param];
+  const headers: Record<string, string> = cfg.apiKey
+    ? { authorization: `Bearer ${cfg.apiKey}` }
+    : {};
   const target = cfg.mapping?.[param];
   const node = target ? (cfg.workflow as ComfyWorkflow)[target.node] : undefined;
   const preferredClass = node?.class_type ?? "KSampler";
@@ -302,8 +317,10 @@ export async function fetchComfyParamValues(
   if (cached && Date.now() - cached.fetchedAt < LIST_CACHE_TTL_MS) return cached.values;
 
   const values =
-    (await queryInputValues(base, preferredClass, inputName)) ??
-    (preferredClass !== "KSampler" ? await queryInputValues(base, "KSampler", inputName) : undefined);
+    (await queryInputValues(base, preferredClass, inputName, headers)) ??
+    (preferredClass !== "KSampler"
+      ? await queryInputValues(base, "KSampler", inputName, headers)
+      : undefined);
   if (!values) {
     throw new GenerationError(
       `Could not retrieve the ${inputName} list from ComfyUI at ${base} (object_info)`,
@@ -317,10 +334,12 @@ async function queryInputValues(
   base: string,
   classType: string,
   inputName: string,
+  headers: Record<string, string>,
 ): Promise<string[] | undefined> {
   let res: Response;
   try {
     res = await fetch(`${base}/object_info/${encodeURIComponent(classType)}`, {
+      headers,
       signal: AbortSignal.timeout(10_000),
     });
   } catch {

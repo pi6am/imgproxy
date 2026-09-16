@@ -18,12 +18,13 @@ const ksamplerObjectInfo = {
   },
 };
 
-function makeConfig(mapping?: ComfyUIProviderConfig["mapping"]): ComfyUIProviderConfig {
+function makeConfig(mapping?: ComfyUIProviderConfig["mapping"], apiKey = ""): ComfyUIProviderConfig {
   return {
     id: "t",
     name: "t",
     type: "comfyui",
     baseUrl: "http://comfy.test",
+    apiKey,
     workflow: {
       "1": { class_type: "KSampler", inputs: { sampler_name: "euler", scheduler: "simple" } },
       "2": { class_type: "CustomSamplerNode", inputs: {} },
@@ -127,5 +128,26 @@ describe("fetchComfyParamValues", () => {
     );
     const cfg = makeConfig({ sampler: { node: "1", input: "sampler_name" } });
     await expect(fetchComfyParamValues(cfg, "sampler")).rejects.toThrow(/object_info/);
+  });
+
+  it("sends the configured bearer token on object_info requests", async () => {
+    const seenHeaders: (Record<string, string> | undefined)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        seenHeaders.push(init?.headers as Record<string, string> | undefined);
+        return new Response(JSON.stringify(ksamplerObjectInfo), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    const cfg = makeConfig({ sampler: { node: "1", input: "sampler_name" } }, "sekret-token");
+    await expect(fetchComfyParamValues(cfg, "sampler")).resolves.toEqual([
+      "euler",
+      "euler_ancestral",
+      "dpmpp_2m",
+    ]);
+    expect(seenHeaders[0]).toEqual({ authorization: "Bearer sekret-token" });
   });
 });

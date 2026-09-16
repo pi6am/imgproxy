@@ -43,6 +43,8 @@ export const comfyuiProviderSchema = z.object({
   name: z.string().min(1),
   type: z.literal("comfyui"),
   baseUrl: z.string().min(1),
+  /** Optional bearer token sent to ComfyUI (for instances behind token auth). */
+  apiKey: z.string().default(""),
   /** ComfyUI API-format workflow: node id -> node definition. */
   workflow: z.record(z.string(), z.unknown()),
   /** Public parameter name -> node/input target (null = not mapped). */
@@ -99,14 +101,12 @@ export const configSchema = z.object({
           token: z.string().default(""),
         })
         .default({ enabled: true, token: "" }),
-      a1111: z
-        .object({
-          enabled: z.boolean().default(true),
-          token: z.string().default(""),
-        })
-        .default({ enabled: true, token: "" }),
+      // Note: the A1111 ecosystem has no bearer-token auth (A1111/Forge use
+      // HTTP Basic via --api-auth; most clients send nothing), so the exposed
+      // A1111 API only has an enable toggle.
+      a1111: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
     })
-    .default({ openai: { enabled: true, token: "" }, a1111: { enabled: true, token: "" } }),
+    .default({ openai: { enabled: true, token: "" }, a1111: { enabled: true } }),
   activeProviderId: z.string().default(""),
   providers: z.array(providerSchema).default([]),
 });

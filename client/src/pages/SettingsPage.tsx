@@ -79,13 +79,15 @@ export default function SettingsPage({
           title="OpenAI-compatible"
           endpoint="POST /v1/images/generations"
           value={draft.apis.openai}
-          onChange={(v) => setDraft({ ...draft, apis: { ...draft.apis, openai: v } })}
+          onChange={(v) =>
+            setDraft({ ...draft, apis: { ...draft.apis, openai: { enabled: v.enabled, token: v.token ?? "" } } })
+          }
         />
         <ApiToggle
           title="A1111-compatible"
           endpoint="POST /sdapi/v1/txt2img"
           value={draft.apis.a1111}
-          onChange={(v) => setDraft({ ...draft, apis: { ...draft.apis, a1111: v } })}
+          onChange={(v) => setDraft({ ...draft, apis: { ...draft.apis, a1111: { enabled: v.enabled } } })}
         />
       </section>
 
@@ -133,8 +135,8 @@ function ApiToggle({
 }: {
   title: string;
   endpoint: string;
-  value: { enabled: boolean; token: string };
-  onChange: (v: { enabled: boolean; token: string }) => void;
+  value: { enabled: boolean; token?: string };
+  onChange: (v: { enabled: boolean; token?: string }) => void;
 }) {
   return (
     <div className="api-toggle">
@@ -142,15 +144,17 @@ function ApiToggle({
         <input type="checkbox" checked={value.enabled} onChange={(e) => onChange({ ...value, enabled: e.target.checked })} />
         {title} <code>{endpoint}</code>
       </label>
-      <label className="inline">
-        Bearer token <span className="hint">(optional)</span>
-        <input
-          type="password"
-          value={value.token}
-          onChange={(e) => onChange({ ...value, token: e.target.value })}
-          placeholder="leave empty for no auth"
-        />
-      </label>
+      {value.token !== undefined && (
+        <label className="inline">
+          Bearer token <span className="hint">(optional)</span>
+          <input
+            type="password"
+            value={value.token}
+            onChange={(e) => onChange({ ...value, token: e.target.value })}
+            placeholder="leave empty for no auth"
+          />
+        </label>
+      )}
     </div>
   );
 }

@@ -42,7 +42,14 @@ export function openAIToRequest(
     throw new GenerationError("A non-empty 'prompt' string is required", { statusCode: 400 });
   }
   const { width, height } = parseOpenAISize(body.size);
-  const responseFormat = body.response_format === "b64_json" ? "b64_json" : "url";
+  let responseFormat: "url" | "b64_json";
+  if (body.response_format === "b64_json") responseFormat = "b64_json";
+  else if (body.response_format === "url") responseFormat = "url";
+  // Mirrors OpenAI behavior: gpt-image-* models don't support response_format
+  // and always return base64 (clients like KoboldAI Lite rely on this).
+  else if (typeof body.model === "string" && body.model.startsWith("gpt-image"))
+    responseFormat = "b64_json";
+  else responseFormat = "url";
   return {
     request: {
       source: "openai",

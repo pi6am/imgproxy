@@ -16,7 +16,6 @@ import {
   mappedModelName,
   modelEntry,
 } from "./protocol.js";
-import { tokenOk } from "./openai.routes.js";
 import type { RouteDeps } from "./deps.js";
 
 function activeProvider(cfg: AppConfig) {
@@ -24,18 +23,12 @@ function activeProvider(cfg: AppConfig) {
 }
 
 export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
-  const guard = () => {
-    const cfg = deps.getConfig();
-    return {
-      enabled: cfg.apis.a1111.enabled,
-      token: cfg.apis.a1111.token,
-    };
-  };
+  // Note: the A1111 ecosystem has no bearer-token auth, so this surface only
+  // has an enable toggle (see config schema).
+  const enabled = () => deps.getConfig().apis.a1111.enabled;
 
   app.post("/sdapi/v1/txt2img", async (req, reply) => {
-    const { enabled, token } = guard();
-    if (!enabled) return reply.status(404).send({ detail: "A1111 API disabled" });
-    if (!tokenOk(req, token)) return reply.status(401).send({ detail: "Invalid or missing bearer token" });
+    if (!enabled()) return reply.status(404).send({ detail: "A1111 API disabled" });
 
     const genReq = a1111ToRequest((req.body ?? {}) as never);
     try {
@@ -66,7 +59,7 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
   // --- Compatibility stubs so common A1111 clients can connect and render their UIs ---
 
   app.get("/sdapi/v1/options", async (req, reply) => {
-    if (!guard().enabled) return reply.status(404).send({ detail: "A1111 API disabled" });
+    if (!enabled()) return reply.status(404).send({ detail: "A1111 API disabled" });
     // samples_format must be non-null: clients like KoboldAI Lite treat its
     // absence as "invalid data" and refuse to connect.
     return {

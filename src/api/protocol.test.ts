@@ -46,6 +46,14 @@ describe("openAIToRequest", () => {
     expect(responseFormat).toBe("url");
   });
 
+  it("defaults to b64_json for gpt-image models (mirrors OpenAI)", () => {
+    expect(openAIToRequest({ prompt: "x", model: "gpt-image-1" }).responseFormat).toBe("b64_json");
+    expect(openAIToRequest({ prompt: "x", model: "gpt-image-1-mini" }).responseFormat).toBe("b64_json");
+    expect(openAIToRequest({ prompt: "x", model: "dall-e-3" }).responseFormat).toBe("url");
+    // explicit response_format wins over the model-based default
+    expect(openAIToRequest({ prompt: "x", model: "gpt-image-1", response_format: "url" }).responseFormat).toBe("url");
+  });
+
   it("rejects empty prompts", () => {
     expect(() => openAIToRequest({ prompt: "" })).toThrow(/prompt/);
     expect(() => openAIToRequest({})).toThrow(/prompt/);
@@ -128,6 +136,7 @@ describe("mappedModelName", () => {
       name: "t",
       type: "comfyui",
       baseUrl: "http://x",
+      apiKey: "",
       workflow,
       mapping,
       defaults: {},

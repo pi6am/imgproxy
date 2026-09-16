@@ -9,9 +9,9 @@ A1111-compatible endpoint. New backend types (e.g. FAL.ai) can be added as addit
 
 - Single local server (default `127.0.0.1:7800`) hosting:
   - **Web UI** at `/` — configure providers, test generations, browse/delete history
-  - **OpenAI-compatible API** — `POST /v1/images/generations` (supports `url` and `b64_json` response formats)
-  - **A1111-compatible API** — `POST /sdapi/v1/txt2img` plus stub endpoints (`/sdapi/v1/options`, `sd-models`, `samplers`, `progress`, …) so standard clients connect cleanly
-  - Each API surface can be enabled/disabled and optionally protected with a bearer token
+  - **OpenAI-compatible API** — `POST /v1/images/generations` (supports `url` and `b64_json` response formats; `gpt-image-*` models default to `b64_json`, matching OpenAI). Optional bearer-token protection.
+  - **A1111-compatible API** — `POST /sdapi/v1/txt2img` plus stub endpoints (`/sdapi/v1/options`, `sd-models`, `samplers`, `progress`, …) so standard clients connect cleanly. Enable/disable only (the A1111 ecosystem has no bearer auth — A1111/Forge use HTTP Basic via `--api-auth`, and clients like KoboldAI Lite send no credentials).
+  - ComfyUI backends can require a token: set the provider's optional **bearer token** and imgproxy will authenticate every request it makes to ComfyUI.
 - **ComfyUI backend**: paste or upload an API-format workflow, then map public parameters
   (prompt, width, height, seed, steps, cfg, …) onto specific node inputs. Unmapped parameters
   are simply not forwarded. The provider submits via `/prompt`, polls `/history`, and downloads
