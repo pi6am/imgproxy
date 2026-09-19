@@ -23,6 +23,10 @@ export function tokenOk(req: { headers: { authorization?: string } }, token: str
   return !token || req.headers.authorization === `Bearer ${token}`;
 }
 
+/** A bare host[:port] (hostname, IPv4, or bracketed IPv6) — the only Host
+ * header forms that are safe to reflect into response URLs. */
+const SAFE_HOST = /^(?:[A-Za-z0-9.\-]+|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/;
+
 export async function registerOpenAIRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   app.post("/v1/images/generations", async (req, reply) => {
     const cfg = deps.getConfig();
@@ -43,7 +47,9 @@ export async function registerOpenAIRoutes(app: FastifyInstance, deps: RouteDeps
 
     try {
       const result = await deps.pipeline.run(parsed.request);
-      const origin = `${req.protocol}://${req.headers.host}`;
+      const rawHost = req.headers.host ?? "";
+      const host = SAFE_HOST.test(rawHost) ? rawHost : `127.0.0.1:${cfg.server.port}`;
+      const origin = `${req.protocol}://${host}`;
       const data = result.images.map((img) =>
         parsed.responseFormat === "b64_json"
           ? { b64_json: readFileAsB64(deps, img.imageId) }
