@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Lllama - All Rights Reserved
+// You may use, distribute and modify this code under the
+// terms of the AGPL 3 license.
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";

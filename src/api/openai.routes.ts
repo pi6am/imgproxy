@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Lllama - All Rights Reserved
+// You may use, distribute and modify this code under the
+// terms of the AGPL 3 license.
+
 import fs from "node:fs";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { GenerationError } from "../core/types.js";

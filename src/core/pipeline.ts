@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Lllama - All Rights Reserved
+// You may use, distribute and modify this code under the
+// terms of the AGPL 3 license.
+
 import { randomUUID } from "node:crypto";
 import type { HistoryDb } from "../history/db.js";
 import type { ImageStore, StoredImageMeta } from "../history/images.js";
