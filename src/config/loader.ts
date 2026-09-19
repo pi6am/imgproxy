@@ -31,7 +31,9 @@ export class ConfigStore {
     const dir = path.dirname(this.file);
     fs.mkdirSync(dir, { recursive: true });
     const tmp = `${this.file}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(parsed, null, 2));
+    // 0600: the config holds provider API keys in plaintext. POSIX modes are
+    // ignored on Windows, so this is harmless there.
+    fs.writeFileSync(tmp, JSON.stringify(parsed, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, this.file);
     this.config = parsed;
     return parsed;
