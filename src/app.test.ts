@@ -2,21 +2,37 @@
 // You may use, distribute and modify this code under the
 // terms of the AGPL 3 license.
 
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 import type { RouteDeps } from "./api/deps.js";
 import type { GenerationPipeline } from "./core/pipeline.js";
 import type { HistoryDb } from "./history/db.js";
-import type { ImageStore } from "./history/images.js";
+import { ImageStore } from "./history/images.js";
 import { configSchema, type AppConfig } from "./config/schema.js";
 
-function stubDeps(config: AppConfig = configSchema.parse({})): RouteDeps {
+const tmpDirs: string[] = [];
+afterEach(() => {
+  while (tmpDirs.length) rmSync(tmpDirs.pop()!, { recursive: true, force: true });
+});
+
+// 1x1 red PNG
+const PNG_1x1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+function stubDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
+  const config: AppConfig = configSchema.parse({});
   return {
     pipeline: undefined as unknown as GenerationPipeline,
     db: undefined as unknown as HistoryDb,
     images: undefined as unknown as ImageStore,
     getConfig: () => config,
     saveConfig: () => config,
+    ...overrides,
   };
 }
 
@@ -43,5 +59,42 @@ describe("CORS scoping", () => {
     const res = await app.inject({ method: "OPTIONS", url: "/api/config" });
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
     expect(res.headers["access-control-allow-methods"]).toBeUndefined();
+  });
+});
+
+describe("image serving with history disabled", () => {
+  it("serves in-memory images that have no history row", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "imgproxy-test-"));
+    tmpDirs.push(dir);
+    const images = new ImageStore(path.join(dir, "images"));
+    const meta = images.save(PNG_1x1, "image/png", "r1", false);
+    expect(readdirSync(path.join(dir, "images"))).toEqual([]);
+
+    const app = buildApp(
+      stubDeps({ db: { getImage: () => undefined } as unknown as HistoryDb, images }),
+    );
+    const res = await app.inject({ method: "GET", url: `/api/images/${meta.imageId}/file` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.rawPayload.length).toBe(PNG_1x1.length);
+  });
+
+  it("still serves persisted images via their history row", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "imgproxy-test-"));
+    tmpDirs.push(dir);
+    const images = new ImageStore(path.join(dir, "images"));
+    const meta = images.save(PNG_1x1, "image/png", "r1", true);
+
+    const app = buildApp(
+      stubDeps({
+        db: { getImage: () => ({ filename: meta.filename, mime: "image/png" }) } as unknown as HistoryDb,
+        images,
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/api/images/${meta.imageId}/file` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.rawPayload.length).toBe(PNG_1x1.length);
   });
 });

@@ -58,6 +58,7 @@ export interface AppConfig {
     openai: { enabled: boolean; token: string };
     a1111: { enabled: boolean };
   };
+  history: { enabled: boolean };
   activeProviderId: string;
   providers: ProviderCfg[];
 }

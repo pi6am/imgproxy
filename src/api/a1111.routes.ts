@@ -2,7 +2,6 @@
 // You may use, distribute and modify this code under the
 // terms of the AGPL 3 license.
 
-import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config/schema.js";
 import type { GenerationPipeline } from "../core/pipeline.js";
@@ -20,7 +19,7 @@ import {
   mappedModelName,
   modelEntry,
 } from "./protocol.js";
-import type { RouteDeps } from "./deps.js";
+import { loadImage, type RouteDeps } from "./deps.js";
 
 function activeProvider(cfg: AppConfig) {
   return cfg.providers.find((p) => p.id === cfg.activeProviderId) ?? cfg.providers[0];
@@ -171,7 +170,7 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
 }
 
 function readB64(deps: RouteDeps, imageId: string): string {
-  const row = deps.db.getImage(imageId);
-  if (!row) throw new GenerationError(`Stored image ${imageId} not found`, { statusCode: 500 });
-  return fs.readFileSync(deps.images.resolve(row.filename)).toString("base64");
+  const image = loadImage(deps, imageId);
+  if (!image) throw new GenerationError(`Stored image ${imageId} not found`, { statusCode: 500 });
+  return image.data.toString("base64");
 }

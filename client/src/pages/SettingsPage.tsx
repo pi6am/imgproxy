@@ -93,6 +93,13 @@ export default function SettingsPage({
           value={draft.apis.a1111}
           onChange={(v) => setDraft({ ...draft, apis: { ...draft.apis, a1111: { enabled: v.enabled } } })}
         />
+        <h3>History</h3>
+        <ApiToggle
+          title="Record generation history"
+          hint="If checked, past generations can be viewed in the History tab, otherwise images are held in memory only"
+          value={draft.history}
+          onChange={(v) => setDraft({ ...draft, history: { enabled: v.enabled } })}
+        />
       </section>
 
       <section className="panel">
@@ -134,11 +141,13 @@ export default function SettingsPage({
 function ApiToggle({
   title,
   endpoint,
+  hint,
   value,
   onChange,
 }: {
   title: string;
-  endpoint: string;
+  endpoint?: string;
+  hint?: string;
   value: { enabled: boolean; token?: string };
   onChange: (v: { enabled: boolean; token?: string }) => void;
 }) {
@@ -146,19 +155,23 @@ function ApiToggle({
     <div className="api-toggle">
       <label className="inline">
         <input type="checkbox" checked={value.enabled} onChange={(e) => onChange({ ...value, enabled: e.target.checked })} />
-        {title} <code>{endpoint}</code>
+        {title}
       </label>
-      {value.token !== undefined && (
-        <label className="inline">
-          Bearer token <span className="hint">(optional)</span>
-          <input
-            type="password"
-            value={value.token}
-            onChange={(e) => onChange({ ...value, token: e.target.value })}
-            placeholder="leave empty for no auth"
-          />
-        </label>
-      )}
+      <div className="api-toggle-details">
+        {endpoint && <code>{endpoint}</code>}
+        {hint && <span className="hint">{hint}</span>}
+        {value.token !== undefined && (
+          <label className="inline">
+            Bearer token <span className="hint">(optional)</span>
+            <input
+              type="password"
+              value={value.token}
+              onChange={(e) => onChange({ ...value, token: e.target.value })}
+              placeholder="leave empty for no auth"
+            />
+          </label>
+        )}
+      </div>
     </div>
   );
 }

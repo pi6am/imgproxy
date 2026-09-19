@@ -2,11 +2,10 @@
 // You may use, distribute and modify this code under the
 // terms of the AGPL 3 license.
 
-import fs from "node:fs";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { GenerationError } from "../core/types.js";
 import { openAIToRequest } from "./protocol.js";
-import type { RouteDeps } from "./deps.js";
+import { loadImage, type RouteDeps } from "./deps.js";
 
 export function openAIError(
   reply: FastifyReply,
@@ -84,7 +83,7 @@ export async function registerOpenAIRoutes(app: FastifyInstance, deps: RouteDeps
 }
 
 function readFileAsB64(deps: RouteDeps, imageId: string): string {
-  const row = deps.db.getImage(imageId);
-  if (!row) throw new GenerationError(`Stored image ${imageId} not found`, { statusCode: 500 });
-  return fs.readFileSync(deps.images.resolve(row.filename)).toString("base64");
+  const image = loadImage(deps, imageId);
+  if (!image) throw new GenerationError(`Stored image ${imageId} not found`, { statusCode: 500 });
+  return image.data.toString("base64");
 }

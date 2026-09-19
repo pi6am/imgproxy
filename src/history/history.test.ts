@@ -2,7 +2,7 @@
 // You may use, distribute and modify this code under the
 // terms of the AGPL 3 license.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -115,5 +115,38 @@ describe("ImageStore", () => {
     expect(store.resolve("../../etc/passwd").split(path.sep).includes("..")).toBe(false);
 
     store.delete(meta.filename);
+  });
+
+  it("keeps non-persisted images in memory only, with oldest-first eviction", () => {
+    const dir = tmpDir();
+    const store = new ImageStore(path.join(dir, "images"), { maxImages: 2, maxBytes: 1024 * 1024 });
+
+    const a1 = store.save(PNG_1x1, "image/png", "reqA", false);
+    const a2 = store.save(PNG_1x1, "image/png", "reqA", false);
+    expect(readdirSync(path.join(dir, "images"))).toEqual([]);
+    expect(store.fetch(a1.imageId)!.data.length).toBe(PNG_1x1.length);
+    expect(store.fetch(a1.imageId)!.mime).toBe("image/png");
+
+    const b1 = store.save(PNG_1x1, "image/png", "reqB", false); // evicts a1
+    expect(store.fetch(a1.imageId)).toBeUndefined();
+    expect(store.fetch(a2.imageId)).toBeDefined();
+
+    store.save(PNG_1x1, "image/png", "reqB", false); // evicts a2
+    expect(store.fetch(a2.imageId)).toBeUndefined();
+    expect(store.fetch(b1.imageId)).toBeDefined();
+  });
+
+  it("never evicts images of the request currently being saved", () => {
+    const dir = tmpDir();
+    const store = new ImageStore(path.join(dir, "images"), { maxImages: 1, maxBytes: 1024 * 1024 });
+
+    const a1 = store.save(PNG_1x1, "image/png", "reqA", false);
+    const a2 = store.save(PNG_1x1, "image/png", "reqA", false); // over cap, same request: kept
+    expect(store.fetch(a1.imageId)).toBeDefined();
+    expect(store.fetch(a2.imageId)).toBeDefined();
+
+    store.save(PNG_1x1, "image/png", "reqB", false); // now reqA's images go
+    expect(store.fetch(a1.imageId)).toBeUndefined();
+    expect(store.fetch(a2.imageId)).toBeUndefined();
   });
 });

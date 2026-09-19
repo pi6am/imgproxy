@@ -173,6 +173,12 @@ select {
   width: 100%;
 }
 
+/* Checkboxes keep their intrinsic size and never stretch like text inputs. */
+input[type="checkbox"] {
+  width: auto;
+  flex: none;
+}
+
 textarea {
   resize: vertical;
   font-family: ui-monospace, monospace;
@@ -408,10 +414,24 @@ pre {
 
 .api-toggle {
   display: flex;
-  gap: 24px;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 16px;
   padding: 8px 0;
+}
+
+/* Fixed label column so descriptions line up across rows. */
+.api-toggle > label.inline {
+  flex: none;
+  min-width: 230px;
+}
+
+.api-toggle-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .api-toggle input[type="password"] {

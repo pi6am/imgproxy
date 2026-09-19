@@ -2,14 +2,13 @@
 // You may use, distribute and modify this code under the
 // terms of the AGPL 3 license.
 
-import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConfigError } from "../config/loader.js";
 import { createProvider } from "../core/registry.js";
 import { listWorkflowNodes, type ComfyWorkflow } from "../providers/workflow.js";
 import { clampInt, optNum, optStr } from "./protocol.js";
-import type { RouteDeps } from "./deps.js";
+import { loadImage, type RouteDeps } from "./deps.js";
 
 export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   const { pipeline, db, images } = deps;
@@ -113,13 +112,11 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
 
   app.get("/api/images/:id/file", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const img = db.getImage(id);
-    if (!img) return reply.status(404).send({ error: "Image not found" });
-    const filePath = images.resolve(img.filename);
-    if (!fs.existsSync(filePath)) return reply.status(404).send({ error: "Image file missing" });
-    reply.header("content-type", img.mime);
+    const image = loadImage(deps, id);
+    if (!image) return reply.status(404).send({ error: "Image not found" });
+    reply.header("content-type", image.mime);
     reply.header("cache-control", "public, max-age=31536000, immutable");
-    return reply.send(fs.createReadStream(filePath));
+    return reply.send(image.data);
   });
 
   app.get("/api/images/:id", async (req, reply) => {

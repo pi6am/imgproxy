@@ -25,38 +25,47 @@ export class GenerationPipeline {
     private registry: ProviderRegistry,
     private db: HistoryDb,
     private images: ImageStore,
+    /** Read dynamically so the Settings toggle applies without a restart. */
+    private historyEnabled: () => boolean = () => true,
   ) {}
 
   async run(req: ImageGenRequest, opts?: { providerId?: string }): Promise<PipelineResult> {
     const provider = opts?.providerId ? this.registry.get(opts.providerId) : this.registry.active;
+    const record = this.historyEnabled();
 
     const id = randomUUID();
-    this.db.createRequest({
-      id,
-      source: req.source,
-      providerId: provider.id,
-      providerType: provider.type,
-      requestJson: JSON.stringify(req),
-    });
+    if (record) {
+      this.db.createRequest({
+        id,
+        source: req.source,
+        providerId: provider.id,
+        providerType: provider.type,
+        requestJson: JSON.stringify(req),
+      });
+    }
 
     try {
       const result = await provider.generate(req);
-      const stored = result.images.map((img) => this.images.save(img.data, img.mime, id));
-      for (const meta of stored) {
-        this.db.addImage({
-          id: meta.imageId,
-          requestId: id,
-          filename: meta.filename,
-          mime: meta.mime,
-          width: meta.width,
-          height: meta.height,
-          bytes: meta.bytes,
-        });
+      // When history is off, images are held in memory only (never on disk),
+      // just long enough to serve the response.
+      const stored = result.images.map((img) => this.images.save(img.data, img.mime, id, record));
+      if (record) {
+        for (const meta of stored) {
+          this.db.addImage({
+            id: meta.imageId,
+            requestId: id,
+            filename: meta.filename,
+            mime: meta.mime,
+            width: meta.width,
+            height: meta.height,
+            bytes: meta.bytes,
+          });
+        }
+        this.db.completeRequest(
+          id,
+          JSON.stringify({ providerName: provider.name, meta: result.meta ?? {}, images: stored }),
+        );
       }
-      this.db.completeRequest(
-        id,
-        JSON.stringify({ providerName: provider.name, meta: result.meta ?? {}, images: stored }),
-      );
       return {
         requestId: id,
         status: "succeeded",
@@ -64,7 +73,7 @@ export class GenerationPipeline {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.db.failRequest(id, message);
+      if (record) this.db.failRequest(id, message);
       if (err instanceof GenerationError) throw err;
       throw new GenerationError(`Provider '${provider.name}' failed: ${message}`, { cause: err });
     }

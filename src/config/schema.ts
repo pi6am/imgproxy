@@ -111,6 +111,12 @@ export const configSchema = z.object({
       a1111: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
     })
     .default({ openai: { enabled: true, token: "" }, a1111: { enabled: true } }),
+  history: z
+    .object({
+      /** When false, new requests/images are not recorded; existing entries are kept. */
+      enabled: z.boolean().default(true),
+    })
+    .default({ enabled: true }),
   activeProviderId: z.string().default(""),
   providers: z.array(providerSchema).default([]),
 });

@@ -22,7 +22,7 @@ const configStore = new ConfigStore(path.join(dataDir, "config.json"));
 const db = new HistoryDb(path.join(dataDir, "imgproxy.db"));
 const images = new ImageStore(path.join(dataDir, "images"));
 const registry = new ProviderRegistry(configStore);
-const pipeline = new GenerationPipeline(registry, db, images);
+const pipeline = new GenerationPipeline(registry, db, images, () => configStore.get().history.enabled);
 
 const app = buildApp({
   pipeline,

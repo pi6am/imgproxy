@@ -11,11 +11,11 @@ A1111-compatible endpoint.
   - **Web UI** at `/` — configure providers, test generations, browse/delete history
   - **OpenAI-compatible API** — `POST /v1/images/generations`
   - **A1111-compatible API** — `POST /sdapi/v1/txt2img` plus stub endpoints
-    (`/sdapi/v1/options`, `sd-models`, `samplers`, `progress`, …) so standard clients connect cleanly. 
+    (`/sdapi/v1/options`, `sd-models`, `samplers`, `progress`, …) so clients connect cleanly. 
 - **ComfyUI backend**: paste or upload an API-format workflow, then map public parameters
   (prompt, width, height, seed, steps, cfg, …) onto specific node inputs.
-- **History**: every request and generated image is recorded locally, viewable in
-  the UI; individual entries or the whole history can be deleted.
+- **History**: Generated images can optionally be saved locally and viewed in
+  the History tab.
 
 ## Important!
 
