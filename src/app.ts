@@ -72,7 +72,7 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
   void registerA1111Routes(app, deps);
   void registerAdminRoutes(app, deps);
 
-  // Favicon files are served from the repository's favicon/ directory at the
+  // Favicon files are served from the client/favicon directory at the
   // site root (browsers don't accept them from a subdirectory).
   const projectRoot = path.resolve(path.dirname(path.dirname(fileURLToPath(import.meta.url))));
   const FAVICON_FILES: Record<string, string> = {
@@ -86,7 +86,7 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
   };
   for (const [file, mime] of Object.entries(FAVICON_FILES)) {
     app.get(`/${file}`, (_req, reply) => {
-      const filePath = path.join(projectRoot, "favicon", file);
+      const filePath = path.join(projectRoot, "client", "favicon", file);
       if (!fs.existsSync(filePath)) return reply.status(404).send({ error: "Not found" });
       reply.header("content-type", mime);
       reply.header("cache-control", "public, max-age=604800");
