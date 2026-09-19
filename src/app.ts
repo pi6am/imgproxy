@@ -25,8 +25,15 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
       : true,
   });
 
-  // Local tool: allow browser clients on other origins (some A1111/OpenAI client UIs need this).
+  // Local tool: allow browser clients on other origins (some A1111/OpenAI
+  // client UIs need this) — but only on the public API surfaces. The web
+  // UI's /api/* admin routes must stay same-origin only: with CORS granted
+  // there, any website open in the user's browser could read provider API
+  // keys from GET /api/config or rewrite the config via PUT /api/config.
+  const PUBLIC_API_PREFIXES = ["/sdapi", "/v1", "/internal"];
+  const isPublicApi = (url: string) => PUBLIC_API_PREFIXES.some((p) => url.split("?")[0]!.startsWith(p));
   app.addHook("onRequest", async (req, reply) => {
+    if (!isPublicApi(req.url)) return;
     reply.header("access-control-allow-origin", "*");
     reply.header("access-control-allow-headers", "content-type, authorization");
     reply.header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -45,19 +52,17 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
   // Concise request/response body logging for the public API surfaces, to make
   // client-compatibility debugging easy. Bodies are truncated; the web UI's own
   // /api traffic is excluded.
-  const API_LOG_PREFIXES = ["/sdapi", "/v1", "/internal"];
-  const isApiTraffic = (url: string) => API_LOG_PREFIXES.some((p) => url.split("?")[0]!.startsWith(p));
   const preview = (value: unknown): string => {
     const text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
     return text.length > 500 ? `${text.slice(0, 500)}…(+${text.length - 500} chars)` : text;
   };
   app.addHook("preHandler", async (req) => {
-    if (req.body !== undefined && req.body !== null && isApiTraffic(req.url)) {
+    if (req.body !== undefined && req.body !== null && isPublicApi(req.url)) {
       req.log.info(`req body  ${req.method} ${req.url}: ${preview(req.body)}`);
     }
   });
   app.addHook("preSerialization", async (req, _reply, payload) => {
-    if (payload !== undefined && payload !== null && isApiTraffic(req.url)) {
+    if (payload !== undefined && payload !== null && isPublicApi(req.url)) {
       req.log.info(`res body  ${req.method} ${req.url}: ${preview(payload)}`);
     }
     return payload;
