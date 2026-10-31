@@ -111,6 +111,7 @@ export default function SettingsPage({
             <button onClick={() => addProvider("comfyui")}>+ ComfyUI</button>
             <button onClick={() => addProvider("openai")}>+ OpenAI-compatible</button>
             <button onClick={() => addProvider("a1111")}>+ A1111</button>
+            <button onClick={() => addProvider("sdcpp")}>+ sd-cpp</button>
           </div>
         </div>
         <label className="active-provider-select">

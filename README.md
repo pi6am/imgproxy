@@ -2,8 +2,9 @@
 
 A local image-generation proxy with a web UI. Exposes OpenAI- and A1111-compatible image
 APIs on your machine and forwards requests to a configurable backend — a ComfyUI instance
-(with a custom workflow + input-to-node mapping), an OpenAI-compatible endpoint, or an
-A1111-compatible endpoint.
+(with a custom workflow + input-to-node mapping), an OpenAI-compatible endpoint, an
+A1111-compatible endpoint, or a [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)
+server (`sd-server`) via its native async job API.
 
 ## Features
 
@@ -14,6 +15,10 @@ A1111-compatible endpoint.
     (`/sdapi/v1/options`, `sd-models`, `samplers`, `progress`, …) so clients connect cleanly. 
 - **ComfyUI backend**: paste or upload an API-format workflow, then map public parameters
   (prompt, width, height, seed, steps, cfg, …) onto specific node inputs.
+- **sd-cpp backend** ([stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) server):
+  submits async jobs to the native `/sdcpp/v1/img_gen` API and polls them to completion.
+  Dimensions, steps, CFG, sampler/scheduler, seed and `n` → `batch_count` are forwarded;
+  anything the request omits falls back to the server's recipe defaults.
 - **History**: Generated images can optionally be saved locally and viewed in
   the History tab.
 
@@ -56,6 +61,20 @@ Everything is configured in the web UI (**Settings** tab) and stored in `data/co
 When more than one image (`n > 1`) is requested: if `batch_size` is mapped, it is forwarded and
 a single run produces all images; otherwise the workflow runs `n` times with incremented seeds.
 
+### sd-cpp (stable-diffusion.cpp) provider setup
+
+1. Start the server from the stable-diffusion.cpp repo (`examples/server`, default port 8080)
+   with your model directories, and load a model — either via its own web UI or
+   `POST /sdcpp/v1/models/load`.
+2. Add an **sd-cpp** provider and set its base URL (e.g. `http://127.0.0.1:8080`).
+3. Mark the provider **active** and hit **Check** — it reports the model loaded on the server.
+
+Each request is submitted as an async job (`POST /sdcpp/v1/img_gen`) and polled
+(`GET /sdcpp/v1/jobs/{id}`) until it completes, fails, is cancelled or times out.
+A1111-style sampler/scheduler names (`Euler a`, `DPM++ 2M`, `Karras`, …) are translated to
+sd-cpp ids automatically; unset parameters are left off the request so the server's recipe
+defaults apply.
+
 ## API examples
 
 OpenAI-compatible:
@@ -80,7 +99,7 @@ curl http://127.0.0.1:7800/sdapi/v1/txt2img \
 src/
   config/     zod-validated config + persistence (data/config.json)
   core/       normalized request types, provider registry, generation pipeline
-  providers/  comfyui (workflow + mapping), openai, a1111
+  providers/  comfyui (workflow + mapping), openai, a1111, sdcpp
   api/        public routes (OpenAI, A1111) + /api/* routes for the web UI
   history/    SQLite (better-sqlite3) + image file storage
 client/       React + Vite web UI (Test, History, Settings)

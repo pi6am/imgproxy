@@ -50,7 +50,17 @@ export interface A1111ProviderCfg {
   timeoutMs: number;
 }
 
-export type ProviderCfg = ComfyUIProviderCfg | OpenAIProviderCfg | A1111ProviderCfg;
+export interface SdCppProviderCfg {
+  id: string;
+  name: string;
+  type: "sdcpp";
+  baseUrl: string;
+  apiKey: string;
+  pollIntervalMs: number;
+  timeoutMs: number;
+}
+
+export type ProviderCfg = ComfyUIProviderCfg | OpenAIProviderCfg | A1111ProviderCfg | SdCppProviderCfg;
 
 export interface AppConfig {
   server: { host: string; port: number };

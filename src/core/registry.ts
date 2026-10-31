@@ -9,6 +9,7 @@ import type { Provider } from "../core/types.js";
 import { ComfyUIProvider } from "../providers/comfyui.js";
 import { OpenAIProvider } from "../providers/openai.js";
 import { A1111Provider } from "../providers/a1111.js";
+import { SdCppProvider } from "../providers/sdcpp.js";
 
 export function createProvider(cfg: ProviderConfig): Provider {
   switch (cfg.type) {
@@ -18,6 +19,8 @@ export function createProvider(cfg: ProviderConfig): Provider {
       return new OpenAIProvider(cfg);
     case "a1111":
       return new A1111Provider(cfg);
+    case "sdcpp":
+      return new SdCppProvider(cfg);
   }
 }
 

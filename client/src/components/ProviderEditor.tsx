@@ -92,7 +92,9 @@ export function ProviderEditor({
               ? "http://127.0.0.1:8188"
               : provider.type === "openai"
                 ? "https://api.openai.com/v1"
-                : "http://127.0.0.1:7860"
+                : provider.type === "a1111"
+                  ? "http://127.0.0.1:7860"
+                  : "http://127.0.0.1:8080"
           }
         />
       </label>
@@ -221,6 +223,46 @@ export function ProviderEditor({
           </label>
         </>
       )}
+
+      {provider.type === "sdcpp" && (
+        <>
+          <label>
+            API key <span className="hint">(optional bearer token)</span>
+            <input
+              type="password"
+              value={provider.apiKey}
+              onChange={(e) => onChange({ ...provider, apiKey: e.target.value } as ProviderCfg)}
+            />
+          </label>
+          <div className="form-grid">
+            <label>
+              Poll interval (ms)
+              <input
+                inputMode="numeric"
+                value={provider.pollIntervalMs}
+                onChange={(e) =>
+                  onChange({ ...provider, pollIntervalMs: Number(e.target.value) || 500 } as ProviderCfg)
+                }
+              />
+            </label>
+            <label>
+              Timeout (ms)
+              <input
+                inputMode="numeric"
+                value={provider.timeoutMs}
+                onChange={(e) =>
+                  onChange({ ...provider, timeoutMs: Number(e.target.value) || 600000 } as ProviderCfg)
+                }
+              />
+            </label>
+          </div>
+          <p className="hint">
+            The model is loaded on the sd-cpp server itself (its web UI or POST /sdcpp/v1/models/load);
+            imgproxy submits jobs to /sdcpp/v1/img_gen and polls them to completion. Parameters you
+            don't send fall back to the server's recipe defaults.
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -288,7 +330,12 @@ function DefaultsEditor({
 
 export function newProvider(type: ProviderCfg["type"]): ProviderCfg {
   const id = newId(type);
-  const name = { comfyui: "New ComfyUI", openai: "New OpenAI-compatible", a1111: "New A1111" }[type];
+  const name = {
+    comfyui: "New ComfyUI",
+    openai: "New OpenAI-compatible",
+    a1111: "New A1111",
+    sdcpp: "New sd-cpp (stable-diffusion.cpp)",
+  }[type];
   if (type === "comfyui") {
     return {
       id,
@@ -305,6 +352,9 @@ export function newProvider(type: ProviderCfg["type"]): ProviderCfg {
   }
   if (type === "openai") {
     return { id, name, type, baseUrl: "https://api.openai.com/v1", apiKey: "", model: "gpt-image-1", timeoutMs: 300000 };
+  }
+  if (type === "sdcpp") {
+    return { id, name, type, baseUrl: "http://127.0.0.1:8080", apiKey: "", pollIntervalMs: 500, timeoutMs: 600000 };
   }
   return { id, name, type, baseUrl: "http://127.0.0.1:7860", apiKey: "", timeoutMs: 300000 };
 }

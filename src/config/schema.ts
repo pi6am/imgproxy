@@ -79,16 +79,29 @@ export const a1111ProviderSchema = z.object({
   timeoutMs: z.number().int().positive().default(300_000),
 });
 
+export const sdcppProviderSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  type: z.literal("sdcpp"),
+  /** Base URL of a stable-diffusion.cpp server (examples/server), e.g. http://host:8080 */
+  baseUrl: z.string().min(1),
+  apiKey: z.string().default(""),
+  pollIntervalMs: z.number().int().positive().max(60_000).default(500),
+  timeoutMs: z.number().int().positive().default(600_000),
+});
+
 export const providerSchema = z.discriminatedUnion("type", [
   comfyuiProviderSchema,
   openaiProviderSchema,
   a1111ProviderSchema,
+  sdcppProviderSchema,
 ]);
 
 export type ProviderConfig = z.infer<typeof providerSchema>;
 export type ComfyUIProviderConfig = z.infer<typeof comfyuiProviderSchema>;
 export type OpenAIProviderConfig = z.infer<typeof openaiProviderSchema>;
 export type A1111ProviderConfig = z.infer<typeof a1111ProviderSchema>;
+export type SdCppProviderConfig = z.infer<typeof sdcppProviderSchema>;
 
 export const configSchema = z.object({
   server: z
