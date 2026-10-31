@@ -317,6 +317,33 @@ describe("POST /sdcpp/v1/img_gen", () => {
     expect(res.json()).toMatchObject({ code: "model_not_loaded" });
   });
 
+  it("refuses requests that hopped through too many imgproxy instances (loop guard)", async () => {
+    const run = vi.fn();
+    const { deps } = makeDeps(makeConfig([comfyProvider()]), run as never);
+    const app = buildApp(deps);
+
+    const looped = await app.inject({
+      method: "POST",
+      url: "/sdcpp/v1/img_gen",
+      headers: { "x-imgproxy-depth": String(99) },
+      payload: { prompt: "x" },
+    });
+    expect(looped.statusCode).toBe(400);
+    expect(looped.json()).toMatchObject({ code: "proxy_loop" });
+    expect(run).not.toHaveBeenCalled();
+
+    // A legitimate chain (e.g. secondary imgproxy → this one) still works and
+    // the hop count travels with the request.
+    const chained = await app.inject({
+      method: "POST",
+      url: "/sdcpp/v1/img_gen",
+      headers: { "x-imgproxy-depth": "1" },
+      payload: { prompt: "x" },
+    });
+    expect(chained.statusCode).toBe(202);
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ hops: 1 }));
+  });
+
   it("rejects video generation clearly", async () => {
     const { deps } = makeDeps(makeConfig([comfyProvider()]), vi.fn() as never);
     const res = await buildApp(deps).inject({ method: "POST", url: "/sdcpp/v1/vid_gen", payload: { prompt: "x" } });

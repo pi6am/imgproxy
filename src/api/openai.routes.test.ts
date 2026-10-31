@@ -50,4 +50,16 @@ describe("response URL origin", () => {
       expect(await generateUrl(host)).toBe("http://127.0.0.1:7800/api/images/img1/file");
     }
   });
+
+  it("refuses requests that hopped through too many imgproxy instances", async () => {
+    const app = buildApp(stubDeps());
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/images/generations",
+      headers: { "x-imgproxy-depth": "99" },
+      payload: { prompt: "a cat" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/forwarded through 99 imgproxy instances/);
+  });
 });

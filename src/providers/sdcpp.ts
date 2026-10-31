@@ -130,7 +130,13 @@ export class SdCppProvider implements Provider {
     try {
       res = await fetch(`${this.base}/sdcpp/v1/img_gen`, {
         method: "POST",
-        headers: { "content-type": "application/json", ...this.authHeaders() },
+        headers: {
+          "content-type": "application/json",
+          // Loop detection: tell an imgproxy downstream (if that's what this
+          // is) how many instances this request has already passed through.
+          "x-imgproxy-depth": String((req.hops ?? 0) + 1),
+          ...this.authHeaders(),
+        },
         body: JSON.stringify(this.buildBody(req)),
         signal: AbortSignal.timeout(30_000),
       });

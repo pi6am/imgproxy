@@ -35,13 +35,16 @@ export class OpenAIProvider implements Provider {
       n,
     };
     if (req.width && req.height) body.size = `${req.width}x${req.height}`;
+    // Loop detection: tell an imgproxy downstream (if that's what this is)
+    // how many instances this request has already passed through.
+    const extraHeaders = { "x-imgproxy-depth": String((req.hops ?? 0) + 1) };
 
-    let res = await this.post({ ...body, response_format: "b64_json" });
+    let res = await this.post({ ...body, response_format: "b64_json" }, extraHeaders);
     // Some newer endpoints (e.g. gpt-image-1) reject the response_format param entirely.
     if (res.status === 400) {
       const text = await res.text();
       if (/response_format/i.test(text)) {
-        res = await this.post(body);
+        res = await this.post(body, extraHeaders);
       } else {
         throw new GenerationError(`Upstream API error (400): ${trim(text)}`);
       }
@@ -85,10 +88,10 @@ export class OpenAIProvider implements Provider {
     return this.cfg.apiKey ? { authorization: `Bearer ${this.cfg.apiKey}` } : {};
   }
 
-  private post(body: unknown): Promise<Response> {
+  private post(body: unknown, extraHeaders: Record<string, string> = {}): Promise<Response> {
     return fetch(`${this.base}/images/generations`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...this.authHeaders() },
+      headers: { "content-type": "application/json", ...this.authHeaders(), ...extraHeaders },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.cfg.timeoutMs),
     });

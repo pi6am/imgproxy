@@ -254,6 +254,19 @@ describe("SdCppProvider.generate", () => {
     expect(submittedBody(calls).lora).toEqual([{ path: "stylize.safetensors", multiplier: 0.8 }]);
   });
 
+  it("sends the proxy-hop header so chained imgproxies can detect loops", async () => {
+    const { calls } = stubHappyJob({
+      id: "job_1",
+      status: "completed",
+      result: { output_format: "png", images: [{ index: 0, b64_json: PNG_B64 }] },
+    });
+
+    await new SdCppProvider(makeConfig()).generate(baseReq({ hops: 2 }));
+
+    const submit = calls.find((c) => c.url.includes("/sdcpp/v1/img_gen"));
+    expect((submit?.init?.headers as Record<string, string>)["x-imgproxy-depth"]).toBe("3");
+  });
+
   it("throws when the job fails upstream", async () => {
     stubHappyJob({
       id: "job_1",

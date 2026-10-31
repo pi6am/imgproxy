@@ -5,7 +5,14 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { AppConfig } from "../config/schema.js";
 import { GenerationError } from "../core/types.js";
-import { A1111_SAMPLERS, A1111_SCHEDULERS, mappedModelName, sdcppToRequest } from "./protocol.js";
+import {
+  A1111_SAMPLERS,
+  A1111_SCHEDULERS,
+  MAX_PROXY_HOPS,
+  mappedModelName,
+  proxyHops,
+  sdcppToRequest,
+} from "./protocol.js";
 import { jobView, SdCppJobStore } from "./sdcpp.jobs.js";
 import {
   listModelFiles,
@@ -213,6 +220,14 @@ export async function registerSdCppRoutes(app: FastifyInstance, deps: RouteDeps)
   app.post("/sdcpp/v1/img_gen", async (req, reply) => {
     if (!enabled()) return disabled(reply);
 
+    const hops = proxyHops(req.headers);
+    if (hops > MAX_PROXY_HOPS) {
+      return reply.status(400).send({
+        error: `Refusing to generate: this request has already been forwarded through ${hops} imgproxy instances. An imgproxy provider is probably pointing at itself or at another imgproxy in a loop.`,
+        code: "proxy_loop",
+      });
+    }
+
     let parsed: ReturnType<typeof sdcppToRequest>;
     try {
       parsed = sdcppToRequest((req.body ?? {}) as never);
@@ -227,6 +242,7 @@ export async function registerSdCppRoutes(app: FastifyInstance, deps: RouteDeps)
         .status(503)
         .send({ error: "No model is loaded: imgproxy has no configured provider", code: "model_not_loaded" });
     }
+    parsed.hops = hops;
 
     const job = jobs.create();
     // The pipeline runs in the background; the job record tracks its progress.

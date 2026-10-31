@@ -238,3 +238,22 @@ export function modelEntry(name: string): {
   const hash = createHash("sha256").update(name).digest("hex").slice(0, 12);
   return { model_name: name, title: name, hash, sha256: hash, filename: name };
 }
+
+// ---------------------------------------------------------------------------
+// Proxy-loop detection
+//
+// imgproxy providers can point at another imgproxy (or, by mistake, at the
+// same imgproxy), and every public API then re-submits to the next instance —
+// a loop would spawn jobs/endless requests. Forwarding providers therefore
+// send x-imgproxy-depth, public routes refuse requests that have already
+// passed through too many instances.
+
+/** How many imgproxy instances a request may pass through, chained. */
+export const MAX_PROXY_HOPS = 4;
+
+/** The hop count an incoming request carries (0 when not forwarded). */
+export function proxyHops(headers: Record<string, unknown>): number {
+  const raw = headers["x-imgproxy-depth"];
+  const n = Array.isArray(raw) ? Number(raw[0]) : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}

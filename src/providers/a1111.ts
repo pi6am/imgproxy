@@ -50,6 +50,9 @@ export class A1111Provider implements Provider {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          // Loop detection: tell an imgproxy downstream (if that's what this
+          // is) how many instances this request has already passed through.
+          "x-imgproxy-depth": String((req.hops ?? 0) + 1),
           ...(this.cfg.apiKey ? { authorization: `Bearer ${this.cfg.apiKey}` } : {}),
         },
         body: JSON.stringify(body),

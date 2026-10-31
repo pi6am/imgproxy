@@ -4,7 +4,7 @@
 
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { GenerationError } from "../core/types.js";
-import { openAIToRequest } from "./protocol.js";
+import { MAX_PROXY_HOPS, openAIToRequest, proxyHops } from "./protocol.js";
 import { loadImage, type RouteDeps } from "./deps.js";
 
 export function openAIError(
@@ -36,6 +36,15 @@ export async function registerOpenAIRoutes(app: FastifyInstance, deps: RouteDeps
       return openAIError(reply, 401, "Invalid or missing bearer token", "authentication_error");
     }
 
+    const hops = proxyHops(req.headers);
+    if (hops > MAX_PROXY_HOPS) {
+      return openAIError(
+        reply,
+        400,
+        `Refusing to generate: this request has already been forwarded through ${hops} imgproxy instances. An imgproxy provider is probably pointing at itself or at another imgproxy in a loop.`,
+      );
+    }
+
     let parsed: ReturnType<typeof openAIToRequest>;
     try {
       parsed = openAIToRequest((req.body ?? {}) as never);
@@ -43,6 +52,7 @@ export async function registerOpenAIRoutes(app: FastifyInstance, deps: RouteDeps
       const e = err as GenerationError;
       return openAIError(reply, e.statusCode ?? 400, e.message);
     }
+    parsed.request.hops = hops;
 
     try {
       const result = await deps.pipeline.run(parsed.request);

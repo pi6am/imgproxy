@@ -17,7 +17,9 @@ import {
   A1111_SAMPLERS,
   A1111_SCHEDULERS,
   mappedModelName,
+  MAX_PROXY_HOPS,
   modelEntry,
+  proxyHops,
 } from "./protocol.js";
 import { listLoras } from "./sdcpp.models.js";
 import { loadImage, type RouteDeps } from "./deps.js";
@@ -34,7 +36,15 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
   app.post("/sdapi/v1/txt2img", async (req, reply) => {
     if (!enabled()) return reply.status(404).send({ detail: "A1111 API disabled" });
 
+    const hops = proxyHops(req.headers);
+    if (hops > MAX_PROXY_HOPS) {
+      return reply.status(400).send({
+        detail: `Refusing to generate: this request has already been forwarded through ${hops} imgproxy instances. An imgproxy provider is probably pointing at itself or at another imgproxy in a loop.`,
+      });
+    }
+
     const genReq = a1111ToRequest((req.body ?? {}) as never);
+    genReq.hops = hops;
     try {
       const result = await deps.pipeline.run(genReq);
       return {

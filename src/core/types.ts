@@ -22,6 +22,12 @@ export interface ImageGenRequest {
   model?: string;
   /** LoRA overrides; applied natively by sd-cpp backends, ignored by others. */
   lora?: Array<{ path: string; multiplier?: number }>;
+  /**
+   * Internal: how many imgproxy instances this request has been forwarded
+   * through. Set by the public-API routes from the x-imgproxy-depth header
+   * and incremented by providers, so imgproxy→imgproxy loops are detected.
+   */
+  hops?: number;
 }
 
 export interface GeneratedImage {
