@@ -19,6 +19,7 @@ import {
   mappedModelName,
   modelEntry,
 } from "./protocol.js";
+import { listLoras } from "./sdcpp.models.js";
 import { loadImage, type RouteDeps } from "./deps.js";
 
 function activeProvider(cfg: AppConfig) {
@@ -120,6 +121,18 @@ export async function registerA1111Routes(app: FastifyInstance, deps: RouteDeps)
   });
 
   app.get("/sdapi/v1/samplers", async () => listItems("sampler", A1111_SAMPLERS));
+
+  // LoRA discovery for clients that map LoRA paths (e.g. sd-cpp launchers):
+  // the real list when the active backend has one, empty otherwise — clients
+  // then send paths unchanged. Reachable when either the A1111 or the sd-cpp
+  // API is enabled, since both client families call it.
+  app.get("/sdapi/v1/loras", async (_req, reply) => {
+    const cfg = deps.getConfig();
+    if (!cfg.apis.a1111.enabled && !cfg.apis.sdcpp.enabled) {
+      return reply.status(404).send({ detail: "LoRA API disabled" });
+    }
+    return listLoras(deps);
+  });
 
   app.get("/sdapi/v1/upscalers", async () => [{ name: "Lanczos" }]);
 

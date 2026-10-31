@@ -52,8 +52,8 @@ export const comfyuiProviderSchema = z.object({
   /** ComfyUI API-format workflow: node id -> node definition. */
   workflow: z.record(z.string(), z.unknown()),
   /** Public parameter name -> node/input target (null = not mapped). */
-  mapping: z.record(z.string(), nodeMappingSchema.nullable()).default({}),
-  defaults: genDefaultsSchema.default({}),
+  mapping: z.record(z.string(), nodeMappingSchema.nullable()).prefault({}),
+  defaults: genDefaultsSchema.prefault({}),
   pollIntervalMs: z.number().int().positive().max(60_000).default(500),
   timeoutMs: z.number().int().positive().default(600_000),
 });
@@ -109,7 +109,7 @@ export const configSchema = z.object({
       host: z.string().default("127.0.0.1"),
       port: z.number().int().min(1).max(65535).default(7800),
     })
-    .default({ host: "127.0.0.1", port: 7800 }),
+    .prefault({ host: "127.0.0.1", port: 7800 }),
   apis: z
     .object({
       openai: z
@@ -117,21 +117,23 @@ export const configSchema = z.object({
           enabled: z.boolean().default(true),
           token: z.string().default(""),
         })
-        .default({ enabled: true, token: "" }),
+        .prefault({ enabled: true, token: "" }),
       // Note: the A1111 ecosystem has no bearer-token auth (A1111/Forge use
       // HTTP Basic via --api-auth; most clients send nothing), so the exposed
       // A1111 API only has an enable toggle.
-      a1111: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
+      a1111: z.object({ enabled: z.boolean().default(true) }).prefault({ enabled: true }),
+      // The sd-cpp ecosystem likewise has no auth; enable toggle only.
+      sdcpp: z.object({ enabled: z.boolean().default(true) }).prefault({ enabled: true }),
     })
-    .default({ openai: { enabled: true, token: "" }, a1111: { enabled: true } }),
+    .prefault({ openai: { enabled: true, token: "" }, a1111: { enabled: true }, sdcpp: { enabled: true } }),
   history: z
     .object({
       /** When false, new requests/images are not recorded; existing entries are kept. */
       enabled: z.boolean().default(true),
     })
-    .default({ enabled: true }),
+    .prefault({ enabled: true }),
   activeProviderId: z.string().default(""),
-  providers: z.array(providerSchema).default([]),
+  providers: z.array(providerSchema).prefault([]),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

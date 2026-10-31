@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ProviderConfig } from "../config/schema.js";
+import { GenerationError } from "../core/types.js";
 import {
   a1111ToRequest,
   clampInt,
@@ -11,6 +12,7 @@ import {
   modelEntry,
   openAIToRequest,
   parseOpenAISize,
+  sdcppToRequest,
 } from "./protocol.js";
 
 describe("parseOpenAISize", () => {
@@ -176,5 +178,74 @@ describe("modelEntry", () => {
     expect(entry.hash).toMatch(/^[0-9a-f]{12}$/);
     expect(entry.sha256).toBe(entry.hash);
     expect(modelEntry("model.safetensors").hash).toBe(entry.hash); // stable
+  });
+});
+
+describe("sdcppToRequest", () => {
+  it("normalizes a full body, translating sampler/scheduler ids to the internal vocabulary", () => {
+    const request = sdcppToRequest({
+      prompt: "a cat",
+      negative_prompt: "blurry",
+      width: 832,
+      height: 480,
+      seed: 42,
+      batch_count: 4,
+      sample_params: {
+        sample_method: "euler_a",
+        scheduler: "discrete",
+        sample_steps: 28,
+        guidance: { txt_cfg: 3.5 },
+      },
+      lora: [{ path: "stylize.safetensors", multiplier: 0.8 }, { path: "", multiplier: 2 }],
+    });
+    expect(request).toEqual({
+      source: "sdcpp",
+      prompt: "a cat",
+      negativePrompt: "blurry",
+      width: 832,
+      height: 480,
+      steps: 28,
+      cfgScale: 3.5,
+      seed: 42,
+      sampler: "Euler a",
+      scheduler: "Automatic",
+      n: 4,
+      lora: [{ path: "stylize.safetensors", multiplier: 0.8 }],
+    });
+  });
+
+  it("keeps unknown sampler ids unchanged (lossless sd-cpp chaining)", () => {
+    expect(sdcppToRequest({ prompt: "x", sample_params: { sample_method: "ipndm_v" } }).sampler).toBe("ipndm_v");
+  });
+
+  it("defaults a sparse body like the sd-cpp server would", () => {
+    expect(sdcppToRequest({ prompt: "x" })).toEqual({ source: "sdcpp", prompt: "x", n: 1 });
+    expect(sdcppToRequest({ prompt: "x", seed: -1, width: 0 }).seed).toBeUndefined();
+    expect(sdcppToRequest({ prompt: "x", width: 0 }).width).toBeUndefined();
+    expect(sdcppToRequest({ prompt: "x", batch_count: 99 }).n).toBe(16);
+  });
+
+  it("rejects a missing prompt with a 400", () => {
+    expect(() => sdcppToRequest({})).toThrow(GenerationError);
+    try {
+      sdcppToRequest({ prompt: "  " });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect((err as GenerationError).statusCode).toBe(400);
+    }
+  });
+
+  it("rejects image inputs imgproxy cannot forward", () => {
+    for (const body of [
+      { prompt: "x", init_image: "data:image/png;base64,..." },
+      { prompt: "x", mask_image: "iVBOR..." },
+      { prompt: "x", control_image: "iVBOR..." },
+      { prompt: "x", ip_adapter_image: "iVBOR..." },
+      { prompt: "x", ref_images: ["iVBOR..."] },
+    ]) {
+      expect(() => sdcppToRequest(body as never)).toThrow(/not supported/);
+    }
+    // null / empty image fields are what well-behaved clients send
+    expect(sdcppToRequest({ prompt: "x", init_image: null, ref_images: [] }).prompt).toBe("x");
   });
 });

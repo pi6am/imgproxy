@@ -2,7 +2,7 @@
 // You may use, distribute and modify this code under the
 // terms of the AGPL 3 license.
 
-export type ApiSource = "openai" | "a1111" | "ui";
+export type ApiSource = "openai" | "a1111" | "sdcpp" | "ui";
 
 /** Protocol-independent image generation request, normalized across public APIs. */
 export interface ImageGenRequest {
@@ -20,6 +20,8 @@ export interface ImageGenRequest {
   /** Total number of images requested. */
   n: number;
   model?: string;
+  /** LoRA overrides; applied natively by sd-cpp backends, ignored by others. */
+  lora?: Array<{ path: string; multiplier?: number }>;
 }
 
 export interface GeneratedImage {

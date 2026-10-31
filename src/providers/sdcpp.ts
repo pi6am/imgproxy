@@ -115,6 +115,13 @@ export class SdCppProvider implements Provider {
     if (req.cfgScale !== undefined) sampleParams.guidance = { txt_cfg: req.cfgScale };
     if (Object.keys(sampleParams).length > 0) body.sample_params = sampleParams;
 
+    // Structured LoRA overrides: only sd-cpp itself can apply these; other
+    // providers ignore them.
+    const lora = (req.lora ?? []).filter((l) => l.path.trim().length > 0);
+    if (lora.length > 0) {
+      body.lora = lora.map((l) => ({ path: l.path, multiplier: l.multiplier ?? 1 }));
+    }
+
     return body;
   }
 
@@ -249,6 +256,85 @@ export function toSdCppSamplerName(name: string): string {
 export function toSdCppSchedulerName(name: string): string {
   const key = name.trim().toLowerCase();
   return SCHEDULER_ALIASES[key] ?? key.replace(/\s+/g, "_");
+}
+
+// ---------------------------------------------------------------------------
+// Inbound vocabulary translation (used when imgproxy exposes an sd-cpp API)
+//
+// Internally imgproxy speaks the A1111 sampler/scheduler vocabulary (every
+// provider translates it at its boundary), so requests received through the
+// sd-cpp API are mapped back to it. Unknown ids pass through unchanged, which
+// keeps sd-cpp → imgproxy → sd-cpp chains lossless.
+
+const SAMPLER_TO_A1111: Record<string, string> = {
+  euler_a: "Euler a",
+  euler: "Euler",
+  heun: "Heun",
+  dpm2: "DPM2",
+  "dpm++2s_a": "DPM++ 2S a",
+  "dpm++2m": "DPM++ 2M",
+  "dpm++2mv2": "DPM++ 2M",
+  lcm: "LCM",
+  ddim: "DDIM",
+  plms: "PLMS",
+  unipc: "UniPC",
+};
+
+const SCHEDULER_TO_A1111: Record<string, string> = {
+  discrete: "Automatic",
+  karras: "Karras",
+  exponential: "Exponential",
+};
+
+/** Translates sd-cpp sample_method ids to the internal A1111 vocabulary. */
+export function fromSdCppSamplerName(name: string): string {
+  return SAMPLER_TO_A1111[name.trim().toLowerCase()] ?? name.trim();
+}
+
+/** Translates sd-cpp scheduler ids to the internal A1111 vocabulary. */
+export function fromSdCppSchedulerName(name: string): string {
+  return SCHEDULER_TO_A1111[name.trim().toLowerCase()] ?? name.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Raw endpoint passthrough (used when imgproxy chains to a real sd-cpp server)
+
+/**
+ * Fetches a JSON endpoint from the sd-cpp server, returning the upstream
+ * status and parsed body so callers can forward errors verbatim.
+ */
+export async function sdCppFetchJson(
+  cfg: SdCppProviderConfig,
+  path: string,
+  options?: { method?: "GET" | "POST"; body?: unknown; timeoutMs?: number },
+): Promise<{ ok: boolean; status: number; json: unknown }> {
+  const base = cfg.baseUrl.replace(/\/+$/, "");
+  const headers: Record<string, string> = cfg.apiKey
+    ? { authorization: `Bearer ${cfg.apiKey}` }
+    : {};
+  if (options?.body !== undefined) headers["content-type"] = "application/json";
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      method: options?.method ?? "GET",
+      headers,
+      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 30_000),
+    });
+  } catch (err) {
+    throw new GenerationError(`Cannot reach sd-cpp server at ${base}: ${(err as Error).message}`, {
+      cause: err,
+    });
+  }
+  const text = await res.text();
+  let json: unknown;
+  try {
+    json = text ? JSON.parse(text) : undefined;
+  } catch {
+    json = { error: text.length > 500 ? `${text.slice(0, 500)}...` : text };
+  }
+  return { ok: res.ok, status: res.status, json };
 }
 
 async function safeText(res: Response): Promise<string> {

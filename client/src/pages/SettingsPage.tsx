@@ -93,6 +93,13 @@ export default function SettingsPage({
           value={draft.apis.a1111}
           onChange={(v) => setDraft({ ...draft, apis: { ...draft.apis, a1111: { enabled: v.enabled } } })}
         />
+        <ApiToggle
+          title="sd-cpp-compatible"
+          endpoint="POST /sdcpp/v1/img_gen"
+          hint="Async job API of stable-diffusion.cpp's server, incl. a (possibly faked) model-selection flow"
+          value={draft.apis.sdcpp}
+          onChange={(v) => setDraft({ ...draft, apis: { ...draft.apis, sdcpp: { enabled: v.enabled } } })}
+        />
         <h3>History</h3>
         <ApiToggle
           title="Record generation history"

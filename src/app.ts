@@ -10,6 +10,7 @@ import fastifyStatic from "@fastify/static";
 import { registerA1111Routes } from "./api/a1111.routes.js";
 import { registerAdminRoutes } from "./api/admin.routes.js";
 import { registerOpenAIRoutes } from "./api/openai.routes.js";
+import { registerSdCppRoutes } from "./api/sdcpp.routes.js";
 import type { RouteDeps } from "./api/deps.js";
 
 export function buildApp(deps: RouteDeps): FastifyInstance {
@@ -30,7 +31,7 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
   // UI's /api/* admin routes must stay same-origin only: with CORS granted
   // there, any website open in the user's browser could read provider API
   // keys from GET /api/config or rewrite the config via PUT /api/config.
-  const PUBLIC_API_PREFIXES = ["/sdapi", "/v1", "/internal"];
+  const PUBLIC_API_PREFIXES = ["/sdapi", "/v1", "/sdcpp", "/internal"];
   const isPublicApi = (url: string) => PUBLIC_API_PREFIXES.some((p) => url.split("?")[0]!.startsWith(p));
   app.addHook("onRequest", async (req, reply) => {
     if (!isPublicApi(req.url)) return;
@@ -70,6 +71,7 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
 
   void registerOpenAIRoutes(app, deps);
   void registerA1111Routes(app, deps);
+  void registerSdCppRoutes(app, deps);
   void registerAdminRoutes(app, deps);
 
   // Favicon files are served from the client/favicon directory at the
@@ -99,7 +101,7 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
     void app.register(fastifyStatic, { root: clientDist });
     app.setNotFoundHandler((req, reply) => {
       const url = req.raw.url ?? "/";
-      if (url.startsWith("/api/") || url.startsWith("/v1/") || url.startsWith("/sdapi/")) {
+      if (url.startsWith("/api/") || url.startsWith("/v1/") || url.startsWith("/sdapi/") || url.startsWith("/sdcpp/")) {
         return reply.status(404).send({ error: "Not found" });
       }
       return reply.sendFile("index.html");
@@ -110,7 +112,7 @@ export function buildApp(deps: RouteDeps): FastifyInstance {
     );
     app.get("/", async () => ({
       service: "imgproxy",
-      hint: "Web UI not built. Endpoints: POST /v1/images/generations, POST /sdapi/v1/txt2img",
+      hint: "Web UI not built. Endpoints: POST /v1/images/generations, POST /sdapi/v1/txt2img, POST /sdcpp/v1/img_gen",
     }));
   }
 

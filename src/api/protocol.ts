@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import type { ProviderConfig } from "../config/schema.js";
 import { GenerationError, type ImageGenRequest } from "../core/types.js";
+import { fromSdCppSamplerName, fromSdCppSchedulerName } from "../providers/sdcpp.js";
 import type { ComfyWorkflow } from "../providers/workflow.js";
 
 export function clampInt(value: unknown, min: number, max: number, dflt: number): number {
@@ -100,6 +101,85 @@ export function a1111ToRequest(body: A1111Txt2ImgBody): ImageGenRequest {
     n: Math.min(32, batchSize * nIter),
     model: optStr(body.override_settings?.sd_model_checkpoint),
   };
+}
+
+export interface SdCppImgGenBody {
+  prompt?: unknown;
+  negative_prompt?: unknown;
+  width?: unknown;
+  height?: unknown;
+  seed?: unknown;
+  batch_count?: unknown;
+  init_image?: unknown;
+  mask_image?: unknown;
+  control_image?: unknown;
+  ip_adapter_image?: unknown;
+  ref_images?: unknown;
+  sample_params?: {
+    sample_steps?: unknown;
+    sample_method?: unknown;
+    scheduler?: unknown;
+    guidance?: { txt_cfg?: unknown } | undefined;
+  };
+  lora?: Array<{ path?: unknown; multiplier?: unknown }> | undefined;
+}
+
+/** Image inputs that change the operation itself (img2img / inpainting /
+ *  control), which imgproxy cannot forward through its txt2img pipeline. */
+const UNSUPPORTED_IMAGE_FIELDS = ["init_image", "mask_image", "control_image", "ip_adapter_image"] as const;
+
+/** Normalizes an sd-cpp /sdcpp/v1/img_gen body into a protocol-independent
+ *  request. Sampler/scheduler ids are mapped back to the internal A1111
+ *  vocabulary so they survive forwarding to any backend. */
+export function sdcppToRequest(body: SdCppImgGenBody): ImageGenRequest {
+  if (typeof body.prompt !== "string" || body.prompt.trim().length === 0) {
+    throw new GenerationError("A non-empty 'prompt' string is required", { statusCode: 400 });
+  }
+  for (const field of UNSUPPORTED_IMAGE_FIELDS) {
+    if (typeof body[field] === "string" && (body[field] as string).length > 0) {
+      throw new GenerationError(
+        `'${field}' is not supported: imgproxy forwards text-to-image requests only`,
+        { statusCode: 400 },
+      );
+    }
+  }
+  if (Array.isArray(body.ref_images) && body.ref_images.length > 0) {
+    throw new GenerationError("'ref_images' is not supported: imgproxy forwards text-to-image requests only", {
+      statusCode: 400,
+    });
+  }
+
+  const seed = optNum(body.seed);
+  const sampler = optStr(body.sample_params?.sample_method);
+  const scheduler = optStr(body.sample_params?.scheduler);
+  const lora = Array.isArray(body.lora)
+    ? body.lora.flatMap((entry) =>
+        typeof entry?.path === "string" && entry.path.length > 0
+          ? [{ path: entry.path, multiplier: optNum(entry.multiplier) }]
+          : [],
+      )
+    : undefined;
+
+  return {
+    source: "sdcpp",
+    prompt: body.prompt,
+    negativePrompt: optStr(body.negative_prompt),
+    width: positiveIntOrOmit(body.width),
+    height: positiveIntOrOmit(body.height),
+    steps: positiveIntOrOmit(body.sample_params?.sample_steps),
+    cfgScale: optNum(body.sample_params?.guidance?.txt_cfg),
+    seed: seed !== undefined && seed >= 0 ? Math.floor(seed) : undefined,
+    sampler: sampler !== undefined ? fromSdCppSamplerName(sampler) : undefined,
+    scheduler: scheduler !== undefined ? fromSdCppSchedulerName(scheduler) : undefined,
+    n: clampInt(body.batch_count, 1, 16, 1),
+    lora: lora !== undefined && lora.length > 0 ? lora : undefined,
+  };
+}
+
+/** Keeps positive integers, treats anything else as "not specified". */
+function positiveIntOrOmit(value: unknown): number | undefined {
+  const n = optNum(value);
+  return n !== undefined && n > 0 ? Math.floor(n) : undefined;
 }
 
 /** Minimal sampler list so A1111 clients can populate their UIs. */

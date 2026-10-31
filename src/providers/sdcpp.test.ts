@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SdCppProviderConfig } from "../config/schema.js";
 import { GenerationError, type ImageGenRequest } from "../core/types.js";
-import { SdCppProvider, toSdCppSamplerName, toSdCppSchedulerName } from "./sdcpp.js";
+import { SdCppProvider, fromSdCppSamplerName, fromSdCppSchedulerName, toSdCppSamplerName, toSdCppSchedulerName } from "./sdcpp.js";
 
 const PNG_B64 = "iVBORw0KGgo="; // provider only decodes, it never parses the image
 
@@ -93,6 +93,26 @@ describe("toSdCppSchedulerName", () => {
     expect(toSdCppSchedulerName("Uniform")).toBe("discrete");
     expect(toSdCppSchedulerName("Karras")).toBe("karras");
     expect(toSdCppSchedulerName("Exponential")).toBe("exponential");
+  });
+});
+
+describe("fromSdCppSamplerName / fromSdCppSchedulerName (inbound)", () => {
+  it("map sd-cpp ids back to the internal A1111 vocabulary", () => {
+    expect(fromSdCppSamplerName("euler_a")).toBe("Euler a");
+    expect(fromSdCppSamplerName("dpm++2m")).toBe("DPM++ 2M");
+    expect(fromSdCppSamplerName("dpm++2s_a")).toBe("DPM++ 2S a");
+    expect(fromSdCppSchedulerName("discrete")).toBe("Automatic");
+    expect(fromSdCppSchedulerName("karras")).toBe("Karras");
+  });
+  it("pass unknown ids through unchanged", () => {
+    expect(fromSdCppSamplerName("ipndm_v")).toBe("ipndm_v");
+    expect(fromSdCppSchedulerName("ays")).toBe("ays");
+  });
+  it("round-trip through the outbound translation", () => {
+    for (const id of ["euler_a", "dpm++2m", "dpm++2s_a"]) {
+      expect(toSdCppSamplerName(fromSdCppSamplerName(id))).toBe(id);
+    }
+    expect(toSdCppSchedulerName(fromSdCppSchedulerName("discrete"))).toBe("discrete");
   });
 });
 
@@ -218,6 +238,20 @@ describe("SdCppProvider.generate", () => {
     for (const call of calls) {
       expect((call.init?.headers as Record<string, string>).authorization).toBe("Bearer sekret-token");
     }
+  });
+
+  it("forwards structured LoRA overrides natively", async () => {
+    const { calls } = stubHappyJob({
+      id: "job_1",
+      status: "completed",
+      result: { output_format: "png", images: [{ index: 0, b64_json: PNG_B64 }] },
+    });
+
+    await new SdCppProvider(makeConfig()).generate(
+      baseReq({ lora: [{ path: "stylize.safetensors", multiplier: 0.8 }, { path: "", multiplier: 2 }] }),
+    );
+
+    expect(submittedBody(calls).lora).toEqual([{ path: "stylize.safetensors", multiplier: 0.8 }]);
   });
 
   it("throws when the job fails upstream", async () => {

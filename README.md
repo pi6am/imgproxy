@@ -1,6 +1,6 @@
 # imgproxy
 
-A local image-generation proxy with a web UI. Exposes OpenAI- and A1111-compatible image
+A local image-generation proxy with a web UI. Exposes OpenAI-, A1111- and sd-cpp-compatible image
 APIs on your machine and forwards requests to a configurable backend — a ComfyUI instance
 (with a custom workflow + input-to-node mapping), an OpenAI-compatible endpoint, an
 A1111-compatible endpoint, or a [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)
@@ -13,6 +13,9 @@ server (`sd-server`) via its native async job API.
   - **OpenAI-compatible API** — `POST /v1/images/generations`
   - **A1111-compatible API** — `POST /sdapi/v1/txt2img` plus stub endpoints
     (`/sdapi/v1/options`, `sd-models`, `samplers`, `progress`, …) so clients connect cleanly. 
+  - **sd-cpp-compatible API** — `POST /sdcpp/v1/img_gen` (async jobs) plus
+    `capabilities`, `model-files`/`models/*` and job polling, so sd-cpp clients and
+    launchers can drive imgproxy like an sd-server.
 - **ComfyUI backend**: paste or upload an API-format workflow, then map public parameters
   (prompt, width, height, seed, steps, cfg, …) onto specific node inputs.
 - **sd-cpp backend** ([stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) server):
@@ -93,6 +96,34 @@ curl http://127.0.0.1:7800/sdapi/v1/txt2img \
   -d '{"prompt":"a cat astronaut","steps":8,"width":1024,"height":1024,"seed":-1}'
 ```
 
+sd-cpp-compatible (async job model):
+
+```bash
+curl http://127.0.0.1:7800/sdcpp/v1/img_gen \
+  -H 'content-type: application/json' \
+  -d '{"prompt":"a cat astronaut","width":1024,"height":1024,"sample_params":{"sample_method":"euler_a","sample_steps":20}}'
+# → 202 { "id": "job_…", "poll_url": "/sdcpp/v1/jobs/job_…" }
+curl http://127.0.0.1:7800/sdcpp/v1/jobs/job_…   # poll until status == "completed"
+```
+
+### sd-cpp-compatible API details
+
+`GET /sdcpp/v1/capabilities` answers locally (it's the launcher health check), advertising
+the samplers/schedulers imgproxy understands. The model-management endpoints are translated
+per active backend:
+
+| Endpoint | sd-cpp backend | A1111 backend | ComfyUI / OpenAI backends |
+| --- | --- | --- | --- |
+| `GET /sdcpp/v1/model-files` | forwarded | upstream `sd-models` | only the workflow's mapped model / the configured model |
+| `GET /sdcpp/v1/models/status` | forwarded | upstream `options` | `ready` with the fixed model |
+| `POST /sdcpp/v1/models/load` | forwarded (blocks) | switches checkpoint via `options` | succeeds for the fixed model, fails for others |
+
+Jobs are held in memory: completed jobs and their images are kept for the process lifetime
+(bounded), a restart or eviction answers `404`/`410` ("job gone") just like an sd-server.
+Cancellation reports `cancel_requested: false` — providers cannot be interrupted mid-run.
+LoRA overrides are applied natively when the backend is sd-cpp itself and ignored elsewhere;
+`GET /sdapi/v1/loras` serves the backend's real list when it has one.
+
 ## Layout
 
 ```
@@ -100,7 +131,7 @@ src/
   config/     zod-validated config + persistence (data/config.json)
   core/       normalized request types, provider registry, generation pipeline
   providers/  comfyui (workflow + mapping), openai, a1111, sdcpp
-  api/        public routes (OpenAI, A1111) + /api/* routes for the web UI
+  api/        public routes (OpenAI, A1111, sd-cpp) + /api/* routes for the web UI
   history/    SQLite (better-sqlite3) + image file storage
 client/       React + Vite web UI (Test, History, Settings)
 data/         runtime state (gitignored)

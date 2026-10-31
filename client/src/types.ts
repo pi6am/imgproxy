@@ -67,6 +67,7 @@ export interface AppConfig {
   apis: {
     openai: { enabled: boolean; token: string };
     a1111: { enabled: boolean };
+    sdcpp: { enabled: boolean };
   };
   history: { enabled: boolean };
   activeProviderId: string;
