@@ -60,4 +60,6 @@ export const api = {
   deleteHistoryItem: (id: string) => unwrap<{ deleted: string }>(fetch(`/api/history/${id}`, { method: "DELETE" })),
 
   clearHistory: () => unwrap<{ cleared: boolean }>(fetch("/api/history", { method: "DELETE" })),
+
+  clearFailedHistory: () => unwrap<{ cleared: boolean }>(fetch("/api/history/failed", { method: "DELETE" })),
 };

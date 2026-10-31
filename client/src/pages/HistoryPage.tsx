@@ -48,6 +48,13 @@ export default function HistoryPage() {
     void load(0);
   };
 
+  const clearFailed = async () => {
+    if (!window.confirm("Delete all failed generations? Successful generations are kept.")) return;
+    await api.clearFailedHistory();
+    setDetail(null);
+    void load(0);
+  };
+
   const openDetail = async (id: string) => {
     try {
       setDetail(await api.historyDetail(id));
@@ -81,9 +88,14 @@ export default function HistoryPage() {
               </>
             )}
             {total > 0 && (
-              <button className="danger" onClick={clearAll}>
-                Clear all
-              </button>
+              <>
+                <button className="danger" onClick={clearFailed}>
+                  Clear failed
+                </button>
+                <button className="danger" onClick={clearAll}>
+                  Clear all
+                </button>
+              </>
             )}
           </div>
         </div>

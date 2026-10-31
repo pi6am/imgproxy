@@ -176,6 +176,21 @@ export class HistoryDb {
     return files;
   }
 
+  /** Deletes every failed request (images cascade); returns image filenames
+   *  to unlink. Failed requests normally have no images, but any stray rows
+   *  (there for historic reasons) are collected too. */
+  clearFailed(): string[] {
+    const files = (
+      this.db
+        .prepare(
+          "SELECT i.filename FROM images i JOIN requests r ON i.request_id = r.id WHERE r.status = 'failed'",
+        )
+        .all() as { filename: string }[]
+    ).map((r) => r.filename);
+    this.db.prepare("DELETE FROM requests WHERE status = 'failed'").run();
+    return files;
+  }
+
   close(): void {
     this.db.close();
   }

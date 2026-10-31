@@ -110,6 +110,14 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
     return { cleared: true };
   });
 
+  // Bulk-delete failed generations (e.g. runs interrupted by a restart)
+  // while keeping successful ones. Static path, so it wins over /:id below.
+  app.delete("/api/history/failed", async () => {
+    const files = db.clearFailed();
+    for (const file of files) images.delete(file);
+    return { cleared: true };
+  });
+
   app.get("/api/images/:id/file", async (req, reply) => {
     const { id } = req.params as { id: string };
     const image = loadImage(deps, id);

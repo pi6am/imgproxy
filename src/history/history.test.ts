@@ -98,6 +98,29 @@ describe("HistoryDb", () => {
     expect(files).toEqual(["a.png"]);
     expect(db.listRequests(10, 0).total).toBe(0);
   });
+
+  it("clears only failed requests, keeping successes, their images and pending rows", () => {
+    const db = new HistoryDb(":memory:");
+    for (const [id, err] of [
+      ["f1", "boom"],
+      ["f2", "interrupted by server restart"],
+    ] as const) {
+      db.createRequest({ id, source: "ui", providerId: "p", providerType: "sdcpp", requestJson: "{}" });
+      db.failRequest(id, err);
+    }
+    db.createRequest({ id: "ok1", source: "ui", providerId: "p", providerType: "comfyui", requestJson: "{}" });
+    db.completeRequest("ok1", '{"meta":{}}');
+    db.addImage({ id: "i1", requestId: "ok1", filename: "keep.png", mime: "image/png", bytes: 1 });
+    db.createRequest({ id: "pend", source: "ui", providerId: "p", providerType: "openai", requestJson: "{}" });
+
+    expect(db.clearFailed()).toEqual([]); // failed requests carry no images
+    expect(db.getRequest("f1")).toBeUndefined();
+    expect(db.getRequest("f2")).toBeUndefined();
+    expect(db.getRequest("ok1")!.status).toBe("succeeded");
+    expect(db.getImage("i1")!.filename).toBe("keep.png");
+    expect(db.getRequest("pend")!.status).toBe("pending");
+    expect(db.listRequests(10, 0).total).toBe(2);
+  });
 });
 
 describe("ImageStore", () => {
